@@ -1,41 +1,87 @@
 from physics import trajectory_3d
-from renderer import plot_trajectory, show_result_table, print_optimal_angle
-from config import G, DEFAULT_VELOCITY, DEFAULT_ANGLES, ALT_LEVELS, WIND_X, WIND_Y
-import argparse
-import numpy as np
+from targets import Target, check_collision
+from utils import (
+    plot_trajectory,
+    find_launch_angle,
+    solve_moving_target_angle,
+    solve_interceptor_angle,
+    plot_intercept_trajectories,
+)
 
-# Command-line parser
-parser = argparse.ArgumentParser("Ballistic Trajectory Simulator")
-parser.add_argument("--velocity", type=float, default=DEFAULT_VELOCITY, help="Initial missile velocity (m/s)")
-parser.add_argument("--angles", type=float, nargs="+", default=DEFAULT_ANGLES, help="List of launch angles")
-args = parser.parse_args()
 
-v = args.velocity
-angles = args.angles
+def run_stationary_target_phase(v0=300.0, target_x=3500.0, target_radius=10.0):
+    target = Target(x=target_x, radius=target_radius)
 
-# Wind & altitude config (from config by default)
-alt_levels = np.array(ALT_LEVELS)
-wind_x_vals = np.array(WIND_X)
-wind_y_vals = np.array(WIND_Y)
-latitude = 0  # optional for Coriolis effect
+    theta_hit = find_launch_angle(v0, target.x)
+    xs, ys, zs, t_arr, _, _, _ = trajectory_3d(v0, theta_hit, return_time=True)
+    hit, hit_idx, closest_distance, closest_idx = check_collision(xs, ys, zs, target, t_array=t_arr)
 
-# Run simulation for all launch angles
-result = []
-for angle in angles:
-    xs, ys, zs, R, T, H = trajectory_3d(
-        v0=v,
-        angle_deg=angle,
-        alt_levels=alt_levels,
-        wind_x_vals=wind_x_vals,
-        wind_y_vals=wind_y_vals,
-        latitude=latitude
+    target_positions = target.positions_over_time(t_arr)
+    print("=== Phase 5.1 + 5.2: Stationary target + hit/miss indicator ===")
+    print(f"Launch angle: {theta_hit:.2f} degrees")
+    print(f"Hit: {hit}")
+    print(f"Closest distance: {closest_distance:.2f} m")
+
+    plot_trajectory(
+        xs,
+        ys,
+        target,
+        hit=hit,
+        hit_idx=hit_idx,
+        closest_idx=closest_idx,
+        target_positions=target_positions,
+        closest_distance=closest_distance,
+        title="Stationary target collision check",
     )
-    # Store full 3D trajectory
-    result.append((xs, ys, zs, R, T, H, angle))
 
-# Display results
-show_result_table(result)
-print_optimal_angle(result)
+    return theta_hit, (xs, ys, zs), t_arr
 
-# Plot 2D trajectory (x vs y) with wind arrows
-plot_trajectory(result)
+
+def run_moving_target_phase(v0=300.0, target_x=3000.0, target_radius=20.0, vx=40.0):
+    moving_target = Target(x=target_x, radius=target_radius, vx=vx)
+    result = solve_moving_target_angle(v0, moving_target)
+
+    xs, ys, zs = result["trajectory"]
+    t_arr = result["time"]
+    target_positions = moving_target.positions_over_time(t_arr)
+
+    print("\n=== Phase 5.3 + 5.4: Angle solver for moving target ===")
+    print(f"Solved launch angle: {result['angle']:.2f} degrees")
+    print(f"Hit: {result['hit']}")
+    print(f"Closest distance: {result['closest_distance']:.2f} m")
+
+    plot_trajectory(
+        xs,
+        ys,
+        moving_target,
+        hit=result["hit"],
+        hit_idx=result["hit_idx"],
+        closest_idx=result["closest_idx"],
+        target_positions=target_positions,
+        closest_distance=result["closest_distance"],
+        title="Moving target interception",
+    )
+
+    return result
+
+
+def run_interceptor_phase(primary_traj, primary_time, interceptor_speed=320.0):
+    result = solve_interceptor_angle(primary_traj, primary_time, interceptor_speed)
+    interceptor_traj = result["trajectory"]
+
+    print("\n=== Phase 5.5 + 5.6: Interceptor + closest approach metric ===")
+    print(f"Interceptor launch angle: {result['angle']:.2f} degrees")
+    print(f"Closest missile-to-missile distance: {result['closest_distance']:.2f} m")
+    print(f"Time of closest approach: {result['shared_time']:.3f} s")
+
+    plot_intercept_trajectories(primary_traj, interceptor_traj)
+
+
+def main():
+    _, stationary_traj, stationary_time = run_stationary_target_phase()
+    run_moving_target_phase()
+    run_interceptor_phase(stationary_traj, stationary_time)
+
+
+if __name__ == "__main__":
+    main()

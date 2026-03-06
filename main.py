@@ -5,6 +5,8 @@ from targets import Target, check_collision
 from utils import (
     animate_trajectory,
     plot_trajectory,
+    plot_trajectory_3d,
+    plot_salvo_dispersion_3d,
     find_launch_angle,
     solve_moving_target_angle,
     solve_interceptor_angle,
@@ -12,7 +14,7 @@ from utils import (
 )
 
 
-def run_stationary_target_phase(simulator, v0=300.0, target_x=3500.0, target_radius=10.0):
+def run_stationary_target_scenario(simulator, v0=300.0, target_x=3500.0, target_radius=10.0):
     target = Target(x=target_x, radius=target_radius)
 
     theta_hit = find_launch_angle(v0, target.x, trajectory_func=simulator.trajectory_3d)
@@ -20,7 +22,7 @@ def run_stationary_target_phase(simulator, v0=300.0, target_x=3500.0, target_rad
     hit, hit_idx, closest_distance, closest_idx = check_collision(xs, ys, zs, target, t_array=t_arr)
 
     target_positions = target.positions_over_time(t_arr)
-    print("=== Phase 5.1 + 5.2: Stationary target + hit/miss indicator ===")
+    print("=== Stationary target result ===")
     print(f"Launch angle: {theta_hit:.2f} degrees")
     print(f"Hit: {hit}")
     print(f"Closest distance: {closest_distance:.2f} m")
@@ -40,7 +42,7 @@ def run_stationary_target_phase(simulator, v0=300.0, target_x=3500.0, target_rad
     return theta_hit, (xs, ys, zs), t_arr
 
 
-def run_moving_target_phase(simulator, v0=300.0, target_x=3000.0, target_radius=20.0, vx=40.0):
+def run_moving_target_scenario(simulator, v0=300.0, target_x=3000.0, target_radius=20.0, vx=40.0):
     moving_target = Target(x=target_x, radius=target_radius, vx=vx)
     result = solve_moving_target_angle(v0, moving_target, trajectory_func=simulator.trajectory_3d)
 
@@ -48,7 +50,7 @@ def run_moving_target_phase(simulator, v0=300.0, target_x=3000.0, target_radius=
     t_arr = result["time"]
     target_positions = moving_target.positions_over_time(t_arr)
 
-    print("\n=== Phase 5.3 + 5.4: Angle solver for moving target ===")
+    print("\n=== Moving target result ===")
     print(f"Solved launch angle: {result['angle']:.2f} degrees")
     print(f"Hit: {result['hit']}")
     print(f"Closest distance: {result['closest_distance']:.2f} m")
@@ -68,7 +70,7 @@ def run_moving_target_phase(simulator, v0=300.0, target_x=3000.0, target_radius=
     return result
 
 
-def run_interceptor_phase(simulator, primary_traj, primary_time, interceptor_speed=320.0):
+def run_interceptor_scenario(simulator, primary_traj, primary_time, interceptor_speed=320.0):
     result = solve_interceptor_angle(
         primary_traj,
         primary_time,
@@ -77,7 +79,7 @@ def run_interceptor_phase(simulator, primary_traj, primary_time, interceptor_spe
     )
     interceptor_traj = result["trajectory"]
 
-    print("\n=== Phase 5.5 + 5.6: Interceptor + closest approach metric ===")
+    print("\n=== Interceptor result ===")
     print(f"Interceptor launch angle: {result['angle']:.2f} degrees")
     print(f"Closest missile-to-missile distance: {result['closest_distance']:.2f} m")
     print(f"Time of closest approach: {result['shared_time']:.3f} s")
@@ -85,7 +87,7 @@ def run_interceptor_phase(simulator, primary_traj, primary_time, interceptor_spe
     plot_intercept_trajectories(primary_traj, interceptor_traj)
 
 
-def run_animation_phase(
+def run_real_time_animation(
     simulator,
     v0=300.0,
     angle_deg=35.0,
@@ -136,41 +138,119 @@ def run_animation_phase(
 
 def build_cli_parser():
     parser = argparse.ArgumentParser("Ballistic Trajectory Simulator")
-    parser.add_argument("--mode", choices=["phase5", "animate"], default="phase5")
-    parser.add_argument("--velocity", type=float, default=300.0)
-    parser.add_argument("--angle", type=float, default=35.0)
-    parser.add_argument("--interval-ms", type=int, default=30)
-    parser.add_argument("--save-gif", type=str, default=None)
-    parser.add_argument("--gif-fps", type=int, default=30)
+    parser.add_argument(
+        "--mode",
+        choices=["target-intercept", "real-time-animation", "three-d-simulation"],
+        default="target-intercept",
+    )
+    parser.add_argument("--launch-speed", type=float, default=300.0)
+    parser.add_argument("--launch-elevation-deg", type=float, default=35.0)
+    parser.add_argument("--frame-interval-ms", type=int, default=30)
+    parser.add_argument("--output-gif-path", type=str, default=None)
+    parser.add_argument("--output-gif-fps", type=int, default=30)
     parser.add_argument("--target-x", type=float, default=None)
     parser.add_argument("--target-radius", type=float, default=20.0)
-    parser.add_argument("--target-vx", type=float, default=0.0)
-    parser.add_argument("--no-show", action="store_true")
+    parser.add_argument("--target-velocity-x", type=float, default=0.0)
+    parser.add_argument("--launch-azimuth-deg", type=float, default=0.0)
+    parser.add_argument("--enable-earth-curvature", action="store_true")
+    parser.add_argument("--enable-salvo", action="store_true")
+    parser.add_argument("--salvo-missile-count", type=int, default=9)
+    parser.add_argument("--salvo-azimuth-span-deg", type=float, default=30.0)
+    parser.add_argument("--headless", action="store_true")
     return parser
+
+
+def run_three_d_simulation(
+    simulator,
+    v0=300.0,
+    angle_deg=35.0,
+    azimuth_deg=0.0,
+    target_x=None,
+    target_radius=20.0,
+    target_vx=0.0,
+    apply_earth_curvature=False,
+    salvo=False,
+    salvo_count=9,
+    salvo_span=30.0,
+):
+    if salvo:
+        half_span = float(salvo_span) * 0.5
+        azimuth_values = np.linspace(azimuth_deg - half_span, azimuth_deg + half_span, int(salvo_count))
+        plot_salvo_dispersion_3d(
+            simulator,
+            v0,
+            angle_deg,
+            azimuth_values,
+            apply_earth_curvature=apply_earth_curvature,
+        )
+        return
+
+    xs, ys, zs, t_arr, _, _, _ = simulator.trajectory_3d(
+        v0,
+        angle_deg,
+        azimuth_deg=azimuth_deg,
+        return_time=True,
+        apply_earth_curvature=apply_earth_curvature,
+    )
+
+    target_positions = None
+    if target_x is not None:
+        target = Target(x=target_x, radius=target_radius, vx=target_vx)
+        target_positions = target.positions_over_time(t_arr)
+        hit, _, closest_distance, _ = check_collision(xs, ys, zs, target, t_array=t_arr)
+        print("=== 3D target state ===")
+        print(f"Target mode: {'moving' if target_vx != 0 else 'stationary'}")
+        print(f"Hit: {hit}")
+        print(f"Closest distance: {closest_distance:.2f} m")
+
+    plot_trajectory_3d(
+        xs,
+        ys,
+        zs,
+        target_positions=target_positions,
+        target_radius=target_radius if target_positions is not None else None,
+        title="3D Simulation",
+    )
 
 
 def main():
     args = build_cli_parser().parse_args()
     simulator = BallisticPhysics()
 
-    if args.mode == "animate":
-        run_animation_phase(
+    if args.mode == "real-time-animation":
+        run_real_time_animation(
             simulator,
-            v0=args.velocity,
-            angle_deg=args.angle,
+            v0=args.launch_speed,
+            angle_deg=args.launch_elevation_deg,
             target_x=args.target_x,
             target_radius=args.target_radius,
-            target_vx=args.target_vx,
-            interval_ms=args.interval_ms,
-            save_gif_path=args.save_gif,
-            gif_fps=args.gif_fps,
-            show_plot=not args.no_show,
+            target_vx=args.target_velocity_x,
+            interval_ms=args.frame_interval_ms,
+            save_gif_path=args.output_gif_path,
+            gif_fps=args.output_gif_fps,
+            show_plot=not args.headless,
         )
         return
 
-    _, stationary_traj, stationary_time = run_stationary_target_phase(simulator, v0=args.velocity)
-    run_moving_target_phase(simulator, v0=args.velocity)
-    run_interceptor_phase(simulator, stationary_traj, stationary_time)
+    if args.mode == "three-d-simulation":
+        run_three_d_simulation(
+            simulator,
+            v0=args.launch_speed,
+            angle_deg=args.launch_elevation_deg,
+            azimuth_deg=args.launch_azimuth_deg,
+            target_x=args.target_x,
+            target_radius=args.target_radius,
+            target_vx=args.target_velocity_x,
+            apply_earth_curvature=args.enable_earth_curvature,
+            salvo=args.enable_salvo,
+            salvo_count=args.salvo_missile_count,
+            salvo_span=args.salvo_azimuth_span_deg,
+        )
+        return
+
+    _, stationary_traj, stationary_time = run_stationary_target_scenario(simulator, v0=args.launch_speed)
+    run_moving_target_scenario(simulator, v0=args.launch_speed)
+    run_interceptor_scenario(simulator, stationary_traj, stationary_time)
 
 
 if __name__ == "__main__":

@@ -16,7 +16,9 @@ class BallisticPhysics:
         area=config.AREA,
         alt_levels=None,
         wind_x_vals=None,
+        wind_z_vals=None,
         wind_y_vals=None,
+        wind_vertical_vals=None,
         latitude=0.0,
     ):
         self.mass = float(mass)
@@ -27,16 +29,22 @@ class BallisticPhysics:
         self.latitude = float(latitude)
         self.alt_levels = np.asarray(alt_levels if alt_levels is not None else config.ALT_LEVELS, dtype=float)
         self.wind_x_vals = np.asarray(wind_x_vals if wind_x_vals is not None else config.WIND_X, dtype=float)
-        self.wind_y_vals = np.asarray(wind_y_vals if wind_y_vals is not None else config.WIND_Y, dtype=float)
+        wind_z_source = wind_z_vals if wind_z_vals is not None else wind_y_vals
+        self.wind_z_vals = np.asarray(wind_z_source if wind_z_source is not None else config.WIND_Y, dtype=float)
+        if wind_vertical_vals is None:
+            self.wind_vertical_vals = np.zeros_like(self.alt_levels, dtype=float)
+        else:
+            self.wind_vertical_vals = np.asarray(wind_vertical_vals, dtype=float)
 
     def projectile_rhs_3d(self, _, state):
         _, y, _, vx, vy, vz = state
         wind_x = np.interp(y, self.alt_levels, self.wind_x_vals)
-        wind_y = np.interp(y, self.alt_levels, self.wind_y_vals)
+        wind_z = np.interp(y, self.alt_levels, self.wind_z_vals)
+        wind_vertical = np.interp(y, self.alt_levels, self.wind_vertical_vals)
 
         vx_rel = vx - wind_x
-        vy_rel = vy
-        vz_rel = vz - wind_y
+        vy_rel = vy - wind_vertical
+        vz_rel = vz - wind_z
         v_rel = np.sqrt(vx_rel**2 + vy_rel**2 + vz_rel**2)
 
         if v_rel != 0:
@@ -52,18 +60,49 @@ class BallisticPhysics:
         return [vx, vy, vz, ax, ay, az]
 
     @overload
-    def trajectory_3d(self, v0, angle_deg, return_time: Literal[False] = False, max_step=0.05, t_final=1000.0):
+    def trajectory_3d(
+        self,
+        v0,
+        angle_deg,
+        azimuth_deg=0.0,
+        return_time: Literal[False] = False,
+        max_step=0.05,
+        t_final=1000.0,
+        apply_earth_curvature=False,
+        earth_radius=6_371_000.0,
+    ):
         ...
 
     @overload
-    def trajectory_3d(self, v0, angle_deg, return_time: Literal[True] = True, max_step=0.05, t_final=1000.0):
+    def trajectory_3d(
+        self,
+        v0,
+        angle_deg,
+        azimuth_deg=0.0,
+        return_time: Literal[True] = True,
+        max_step=0.05,
+        t_final=1000.0,
+        apply_earth_curvature=False,
+        earth_radius=6_371_000.0,
+    ):
         ...
 
-    def trajectory_3d(self, v0, angle_deg, return_time=False, max_step=0.05, t_final=1000.0):
+    def trajectory_3d(
+        self,
+        v0,
+        angle_deg,
+        azimuth_deg=0.0,
+        return_time=False,
+        max_step=0.05,
+        t_final=1000.0,
+        apply_earth_curvature=False,
+        earth_radius=6_371_000.0,
+    ):
         launch_angle = np.radians(angle_deg)
-        vx0 = v0 * np.cos(launch_angle)
+        azimuth = np.radians(azimuth_deg)
+        vx0 = v0 * np.cos(launch_angle) * np.cos(azimuth)
         vy0 = v0 * np.sin(launch_angle)
-        vz0 = 0.0
+        vz0 = v0 * np.cos(launch_angle) * np.sin(azimuth)
         initial_state = [0.0, 0.0, 0.0, vx0, vy0, vz0]
 
         def hit_ground(_, state):
@@ -81,6 +120,11 @@ class BallisticPhysics:
         )
 
         xs, ys, zs = solution.y[0], solution.y[1], solution.y[2]
+        if apply_earth_curvature:
+            ground_range = np.sqrt(xs**2 + zs**2)
+            curvature_drop = (ground_range**2) / (2.0 * earth_radius)
+            ys = ys - curvature_drop
+
         R, T, H = xs[-1], solution.t[-1], np.max(ys)
         if return_time:
             return xs, ys, zs, solution.t, R, T, H
@@ -91,14 +135,19 @@ class BallisticPhysics:
 def trajectory_3d(
     v0,
     angle_deg,
+    azimuth_deg=0.0,
     m=config.MASS,
     g=config.G,
     alt_levels=None,
     wind_x_vals=None,
+    wind_z_vals=None,
     wind_y_vals=None,
+    wind_vertical_vals=None,
     latitude=0,
     return_time: Literal[False] = False,
     max_step=0.05,
+    apply_earth_curvature=False,
+    earth_radius=6_371_000.0,
 ):
     ...
 
@@ -107,14 +156,19 @@ def trajectory_3d(
 def trajectory_3d(
     v0,
     angle_deg,
+    azimuth_deg=0.0,
     m=config.MASS,
     g=config.G,
     alt_levels=None,
     wind_x_vals=None,
+    wind_z_vals=None,
     wind_y_vals=None,
+    wind_vertical_vals=None,
     latitude=0,
     return_time: Literal[True] = True,
     max_step=0.05,
+    apply_earth_curvature=False,
+    earth_radius=6_371_000.0,
 ):
     ...
 
@@ -122,21 +176,36 @@ def trajectory_3d(
 def trajectory_3d(
     v0,
     angle_deg,
+    azimuth_deg=0.0,
     m=config.MASS,
     g=config.G,
     alt_levels=None,
     wind_x_vals=None,
+    wind_z_vals=None,
     wind_y_vals=None,
+    wind_vertical_vals=None,
     latitude=0,
     return_time=False,
     max_step=0.05,
+    apply_earth_curvature=False,
+    earth_radius=6_371_000.0,
 ):
     simulator = BallisticPhysics(
         mass=m,
         gravity=g,
         alt_levels=alt_levels,
         wind_x_vals=wind_x_vals,
+        wind_z_vals=wind_z_vals,
         wind_y_vals=wind_y_vals,
+        wind_vertical_vals=wind_vertical_vals,
         latitude=latitude,
     )
-    return simulator.trajectory_3d(v0, angle_deg, return_time=return_time, max_step=max_step)
+    return simulator.trajectory_3d(
+        v0,
+        angle_deg,
+        azimuth_deg=azimuth_deg,
+        return_time=return_time,
+        max_step=max_step,
+        apply_earth_curvature=apply_earth_curvature,
+        earth_radius=earth_radius,
+    )

@@ -328,3 +328,92 @@ def animate_trajectory(
         plt.close(fig)
 
     return anim
+
+
+def plot_trajectory_3d(
+    xs,
+    ys,
+    zs,
+    target_positions=None,
+    target_radius=None,
+    title="Phase 7 - 3D Trajectory",
+    elev=25,
+    azim=-60,
+):
+    fig = plt.figure(figsize=(10, 7))
+    ax = fig.add_subplot(111, projection="3d")
+
+    ax.plot(xs, zs, ys, color="tab:blue", lw=2, label="Missile")
+
+    x_min, x_max = float(np.min(xs)), float(np.max(xs))
+    z_min, z_max = float(np.min(zs)), float(np.max(zs))
+    x_span = max(x_max - x_min, 1.0)
+    z_span = max(z_max - z_min, 1.0)
+    x_pad = 0.05 * x_span
+    z_pad = 0.05 * z_span
+
+    gx = np.linspace(x_min - x_pad, x_max + x_pad, 20)
+    gz = np.linspace(z_min - z_pad, z_max + z_pad, 20)
+    GX, GZ = np.meshgrid(gx, gz)
+    GY = np.zeros_like(GX)
+    ax.plot_surface(GX, GZ, GY, alpha=0.2, color="gray", linewidth=0)
+
+    if target_positions is not None:
+        tx = target_positions[:, 0]
+        ty = target_positions[:, 1]
+        tz = target_positions[:, 2]
+        ax.plot(tx, tz, ty, linestyle="--", color="green", label="Target path")
+        ax.scatter([tx[-1]], [tz[-1]], [ty[-1]], color="green", s=40, label="Target")
+
+        if target_radius is not None:
+            theta = np.linspace(0, 2 * np.pi, 80)
+            cx = tx[-1] + target_radius * np.cos(theta)
+            cz = tz[-1] + target_radius * np.sin(theta)
+            cy = np.full_like(theta, ty[-1])
+            ax.plot(cx, cz, cy, color="green", alpha=0.8)
+
+    ax.set_xlabel("X (range)")
+    ax.set_ylabel("Z (cross-range)")
+    ax.set_zlabel("Y (altitude)")
+    ax.set_title(title)
+    ax.view_init(elev=elev, azim=azim)
+    ax.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_salvo_dispersion_3d(
+    simulator,
+    v0,
+    angle_deg,
+    azimuth_values,
+    max_step=0.05,
+    apply_earth_curvature=False,
+):
+    fig = plt.figure(figsize=(10, 7))
+    ax = fig.add_subplot(111, projection="3d")
+
+    impact_x = []
+    impact_z = []
+
+    for az in azimuth_values:
+        xs, ys, zs, _, _, _ = simulator.trajectory_3d(
+            v0,
+            angle_deg,
+            azimuth_deg=float(az),
+            max_step=max_step,
+            apply_earth_curvature=apply_earth_curvature,
+        )
+        ax.plot(xs, zs, ys, alpha=0.8)
+        impact_x.append(xs[-1])
+        impact_z.append(zs[-1])
+
+    ax.scatter(impact_x, impact_z, np.zeros_like(impact_x), color="red", s=30, label="Impact points")
+    ax.set_xlabel("X (range)")
+    ax.set_ylabel("Z (cross-range)")
+    ax.set_zlabel("Y (altitude)")
+    ax.set_title("Phase 7.6 - Multi-salvo dispersion")
+    ax.view_init(elev=22, azim=-65)
+    ax.legend()
+    plt.tight_layout()
+    plt.show()

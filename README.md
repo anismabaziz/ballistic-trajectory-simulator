@@ -120,3 +120,5 @@ $$a_y = -g - \frac{F_d}{m} \cdot \frac{v_y}{|v|}$$
 - $\frac{v_x}{|v|}$ and $\frac{v_y}{|v|}$ are components of the **unit vector** of velocity
 - $-\frac{F_d}{m}$ scales the drag into an acceleration
 - $-g$ acts only vertically
+
+- now we move from noral euleur method to using RK4 then we implement RK4 using bulting scipy functions rather than using loops for updates

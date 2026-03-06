@@ -1,5 +1,5 @@
 import numpy as np
-from config import G
+import config as config
 
 
 """ 
@@ -11,30 +11,61 @@ this function takes:
 returns position change accross time until the missile reachs ground 
 and also time of flight and max horizontal range
 """
-def trajectory(v: float, angle_degree: float, g: float = G):
+def trajectory(v: float, angle_degree: float, m: float  = config.MASS, g: float = config.G, dt: float = 0.01):
 
   # calculate radian value of angle
   a = np.radians(angle_degree)
 
-  # calculate time of flight 
-  T = (2 * v * np.sin(a)) / g
+  # calculate initial components of the velocity 
+  vx = v * np.cos(a)
+  vy = v * np.sin(a)
 
-  # create an array that will represent the x axis values for time
-  t = np.linspace(0, T, 500)
+  # set up initial horizontal and vertical positions
+  x, y, t = 0.0, 0.0, 0.0
 
-  # compute horizontal position for each time value 
-  x = v * np.cos(a) * t
+  xs = []
+  ys = []
 
-  # compute vertical position for each time value 
-  y = v * np.sin(a) * t - .5 * g * t**2
+  # max height
+  H = 0
 
-  # clip underground vertical position
-  y = np.clip(y, 0, None)
+  while y >= 0:
 
-  # compute the max horizontal range
-  R = (v**2 * np.sin(2*a)) / g
+    # calculate current velocity
+    velocity = np.sqrt(vx**2 + vy**2)
 
-  # compute maximum height the missile can reach
-  H = (v**2 * (np.sin(a))**2) / (2 * g)
+    # calculate current drag force
+    Fd = 0.5 * config.RHO * config.CD * config.AREA * velocity**2
 
-  return x, y, R, T, H
+    # calculate acceleration components 
+    if velocity != 0:
+      ax = -(Fd / m) * (vx / velocity)
+      ay = -g - (Fd / m) * (vy / velocity)
+    else:
+      ax = 0
+      ay = -g
+
+    # update velocity 
+    vx += ax * dt
+    vy += ay * dt
+
+    # update position based on velocity 
+    x += vx * dt
+    y += vy * dt
+
+    # add positions
+    xs.append(x)
+    ys.append(y)
+
+    # update time 
+    t += dt
+
+    # update max height 
+    if y > H:
+      H = y
+
+  # max missile range
+  R = x
+  T = t
+
+  return np.array(xs), np.array(ys), R, T, H

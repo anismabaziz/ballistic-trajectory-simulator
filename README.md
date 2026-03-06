@@ -1,63 +1,122 @@
-# Part 1: Basic projectile motion
+# Part 1: Basic Projectile Motion
 
-## What is a projectile ?
+## What is a Projectile?
 
-a projectile is any object that is thrown or shot into the air and moves under the influence
-of gravity only
+A projectile is any object that is thrown or shot into the air and moves under the influence of gravity only.
 
-after a projectile is launched, ignoring air and other factors, only gravity acts upon it
-making it go down
+After a projectile is launched, ignoring air and other factors, only gravity acts upon it making it go down.
 
-## Motion in 2 diretions
+## Motion in 2 Directions
 
-a projectile moves in 2 directions at once:
+A projectile moves in 2 directions at once:
 
-- Horizontally : on the x-axis
-- Vertiacally : on the y-axis
+- **Horizontally**: on the x-axis
+- **Vertically**: on the y-axis
 
-horizontal and vertical motion act independently but they share time
+Horizontal and vertical motion act independently but they share time.
 
-## Horizontal motion equation
+## Horizontal Motion Equation
 
-- equation: x(t)=v⋅cos(θ)⋅t
+**Equation:** $x(t) = v \cdot \cos(\theta) \cdot t$
 
-v : represents the speed at which the projectile is launched
-t : represents time since launch
-θ : the angle we throw the projectile at
-cos(θ) : gives the horizontal part of the speed
+| Symbol         | Description                               |
+| -------------- | ----------------------------------------- |
+| $v$            | Speed at which the projectile is launched |
+| $t$            | Time since launch                         |
+| $\theta$       | Launch angle                              |
+| $\cos(\theta)$ | Horizontal component of velocity          |
 
-horizontal speed doesn't slowdown since we are ignoring air
+&gt; Horizontal speed doesn't slow down since we are ignoring air resistance.
 
-## Vertical motion equation
+## Vertical Motion Equation
 
-- equation: y(t)=v⋅sin(θ)⋅t−1/2​gt^2
+**Equation:** $y(t) = v \cdot \sin(\theta) \cdot t - \frac{1}{2}gt^2$
 
-v : speed at which the projectile is launched
-t : time since launch
-θ : the angle we throw the projectile at
-sin(θ) : the vertial part of the speed ie: how fast it goes up
--1/2 gt^2 : how much the gravity is pulling it down
+| Symbol             | Description                                          |
+| ------------------ | ---------------------------------------------------- |
+| $v$                | Speed at which the projectile is launched            |
+| $t$                | Time since launch                                    |
+| $\theta$           | Launch angle                                         |
+| $\sin(\theta)$     | Vertical component of velocity (how fast it goes up) |
+| $-\frac{1}{2}gt^2$ | Gravity pulling it down                              |
 
-## Time of flight
+## Time of Flight
 
-- formula: T = 2v.sin(θ) / g
+**Formula:** $T = \frac{2v \cdot \sin(\theta)}{g}$
 
-this one comes from when y(t) = 0 meaning the projectile lands back on land
+This comes from when $y(t) = 0$, meaning the projectile lands back on the ground.
 
-## Maximum horizontal range
+## Maximum Horizontal Range
 
-- formula : R = (v^2 . sin(2theta)) / g
+**Formula:** $R = \frac{v^2 \cdot \sin(2\theta)}{g}$
 
-this formula calculates how far the projectile goes horizontally before hitting the land
-we can get it also from horizontal speed \* time taken
-sin(2theta) comes from combining horizontal and vertial speed
+This calculates how far the projectile goes horizontally before hitting the ground. We can also get it from horizontal speed × time taken.
 
-maximum range is when theta is 45 degrees
+$\sin(2\theta)$ comes from combining horizontal and vertical speed.
 
-# Part 2:
+**Maximum range is achieved when $\theta = 45°$**
 
-## Optimum angle finder
+---
 
-the optimal angle is the that acheives the heighest horizontal range
-max horizontal range is achieved when sin(2theta) == 1 => 2theta = 90deg
-this means theta is 45deg
+# Part 2: Add Interactivity to the Project
+
+## Optimum Angle Finder
+
+The optimal angle is the one that achieves the highest horizontal range.
+
+Max horizontal range is achieved when $\sin(2\theta) = 1 \Rightarrow 2\theta = 90°$
+
+This means **$\theta = 45°$**
+
+---
+
+# Part 3: Air Resistance and Drag Physics
+
+## Reasons for Switch
+
+In a vacuum, projectiles follow a perfect parabola because the only acting force upon them is gravity.
+
+In air, projectiles experience **drag** which is an opposite force to their motion, meaning both vertical and horizontal velocity decrease over time.
+
+In the first phase of our simulation we only had closed-form equations which only work in closed environments without air.
+
+With drag, acceleration depends on velocity, so we can't just solve algebraically.
+
+**Solution:** We use numerical integration
+
+- We take small steps $dt$
+- We update velocity and position iteratively
+
+This is done through methods like: **Euler method**, **RK4 (Runge-Kutta 4th order)**
+
+## Drag Force Equation
+
+$$F_d = 0.5 \cdot \rho \cdot C_d \cdot A \cdot v^2$$
+
+| Symbol | Description                                                        |
+| ------ | ------------------------------------------------------------------ |
+| $F_d$  | Magnitude of drag (N)                                              |
+| $\rho$ | Air density (kg/m³) → usually **1.225** at sea level               |
+| $C_d$  | Drag coefficient (depends on shape) → **0.47** for a sphere        |
+| $A$    | Cross-sectional area (m²) — how big the missile is "from the side" |
+| $v$    | Speed of the projectile (m/s)                                      |
+
+&gt; **Key idea:** Drag increases with speed **squared**, so faster projectiles feel _much_ more drag.
+
+## Net Accelerations
+
+The drag force always points **opposite** the velocity vector.
+
+### Horizontal Acceleration:
+
+$$a_x = -\frac{F_d}{m} \cdot \frac{v_x}{|v|}$$
+
+### Vertical Acceleration:
+
+$$a_y = -g - \frac{F_d}{m} \cdot \frac{v_y}{|v|}$$
+
+### Where:
+
+- $\frac{v_x}{|v|}$ and $\frac{v_y}{|v|}$ are components of the **unit vector** of velocity
+- $-\frac{F_d}{m}$ scales the drag into an acceleration
+- $-g$ acts only vertically

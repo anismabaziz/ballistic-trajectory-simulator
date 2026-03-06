@@ -18,11 +18,11 @@ def plot_trajectory(results: list):
 
 def show_result_table(results: list):
   
-  print(f"{'Angle (°)':<10}{'Range (m)':<12}{'Time of Flight (s)':<18}{'Max Height (m)':<15}")
+  print(f"{'Angle (°)':<10}{'Range (m)':<12}{'Time of Flight (s)':<22}{'Max Height (m)':<15}")
 
   for item in results:
     _, _, R, T, H, angle = item
-    print(f"{angle:<10}{R:<12.2f}{T:<18.2f}{H:<15.2f}")
+    print(f"{angle:<10}{R:<12.2f}{T:<22.2f}{H:<15.2f}")
 
 
 def print_optimal_angle(results: list):

@@ -38,6 +38,11 @@ class BallisticPhysics:
 
     def projectile_rhs_3d(self, _, state):
         _, y, _, vx, vy, vz = state
+        ax, ay, az = self.compute_acceleration(y, vx, vy, vz)
+        return [vx, vy, vz, ax, ay, az]
+
+    def compute_acceleration(self, altitude_y, vx, vy, vz):
+        y = altitude_y
         wind_x = np.interp(y, self.alt_levels, self.wind_x_vals)
         wind_z = np.interp(y, self.alt_levels, self.wind_z_vals)
         wind_vertical = np.interp(y, self.alt_levels, self.wind_vertical_vals)
@@ -57,7 +62,7 @@ class BallisticPhysics:
 
         ax += 2 * self.OMEGA * vz * np.sin(self.latitude)
         az += -2 * self.OMEGA * vx * np.sin(self.latitude)
-        return [vx, vy, vz, ax, ay, az]
+        return ax, ay, az
 
     @overload
     def trajectory_3d(

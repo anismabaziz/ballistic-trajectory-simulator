@@ -1,6 +1,7 @@
 import argparse
 import numpy as np
 from physics import BallisticPhysics
+from pygame_simulation import PygameBallisticSimulation
 from targets import Target, check_collision
 from utils import (
     animate_trajectory,
@@ -140,7 +141,7 @@ def build_cli_parser():
     parser = argparse.ArgumentParser("Ballistic Trajectory Simulator")
     parser.add_argument(
         "--mode",
-        choices=["target-intercept", "real-time-animation", "three-d-simulation"],
+        choices=["target-intercept", "real-time-animation", "three-d-simulation", "interactive-simulator"],
         default="target-intercept",
     )
     parser.add_argument("--launch-speed", type=float, default=300.0)
@@ -158,6 +159,28 @@ def build_cli_parser():
     parser.add_argument("--salvo-azimuth-span-deg", type=float, default=30.0)
     parser.add_argument("--headless", action="store_true")
     return parser
+
+
+def run_interactive_simulator(
+    simulator,
+    launch_speed,
+    launch_elevation_deg,
+    launch_azimuth_deg,
+    target_x,
+    target_radius,
+    target_velocity_x,
+):
+    target_x_value = float(target_x) if target_x is not None else 2800.0
+    ui = PygameBallisticSimulation(
+        simulator=simulator,
+        launch_speed=launch_speed,
+        launch_elevation_deg=launch_elevation_deg,
+        launch_azimuth_deg=launch_azimuth_deg,
+        target_x=target_x_value,
+        target_radius=target_radius,
+        target_velocity_x=target_velocity_x,
+    )
+    ui.run()
 
 
 def run_three_d_simulation(
@@ -245,6 +268,18 @@ def main():
             salvo=args.enable_salvo,
             salvo_count=args.salvo_missile_count,
             salvo_span=args.salvo_azimuth_span_deg,
+        )
+        return
+
+    if args.mode == "interactive-simulator":
+        run_interactive_simulator(
+            simulator,
+            launch_speed=args.launch_speed,
+            launch_elevation_deg=args.launch_elevation_deg,
+            launch_azimuth_deg=args.launch_azimuth_deg,
+            target_x=args.target_x,
+            target_radius=args.target_radius,
+            target_velocity_x=args.target_velocity_x,
         )
         return
 

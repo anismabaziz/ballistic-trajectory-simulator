@@ -122,3 +122,140 @@ $$a_y = -g - \frac{F_d}{m} \cdot \frac{v_y}{|v|}$$
 - $-g$ acts only vertically
 
 - now we move from noral euleur method to using RK4 then we implement RK4 using bulting scipy functions rather than using loops for updates
+
+---
+
+# Part 4: Physics Engine Refactor (Class-Based)
+
+The simulator now uses an object-oriented physics engine in `physics.py`.
+
+## `BallisticPhysics` class
+
+`BallisticPhysics` stores the full environment and physical model:
+
+- mass, gravity, air density, drag coefficient, cross-sectional area
+- altitude-dependent wind tables
+- optional latitude for Coriolis effects
+
+Main methods:
+
+- `projectile_rhs_3d(t, state)` computes the differential equations
+- `trajectory_3d(v0, angle_deg, ...)` integrates with `scipy.integrate.solve_ivp`
+
+This makes it easier to run multiple scenarios with different environments by creating multiple simulator instances.
+
+Example:
+
+```python
+from physics import BallisticPhysics
+
+sim = BallisticPhysics()
+xs, ys, zs, t, R, T, H = sim.trajectory_3d(300, 35, return_time=True)
+```
+
+Backward compatibility is preserved through a module-level wrapper function:
+
+```python
+from physics import trajectory_3d
+```
+
+---
+
+# Part 5: Target Interception and Collision Detection
+
+Phase 5 features are now implemented end-to-end.
+
+## New capabilities
+
+1. **Stationary target collision check**
+   - Place a target at `(x, y, z)` with radius `r`
+   - Detect hit by checking missile-target distance at each simulation time
+
+2. **Hit/miss visualization**
+   - Green marker/circle on hit
+   - Red miss marker on miss
+   - Closest-approach point highlighted
+
+3. **Angle solver for interception**
+   - Uses root finding (`scipy.optimize.brentq`) for stationary target range matching
+
+4. **Moving target support**
+   - Targets can move with constant velocity `(vx, vy, vz)`
+   - Solver searches launch angle minimizing miss distance
+
+5. **Interceptor missile scenario**
+   - Simulate second missile launched from origin
+   - Solve launch angle minimizing separation from primary missile
+
+6. **Closest-approach metric**
+   - Reports minimum Euclidean distance over shared simulation time
+
+## Modules added/updated
+
+- `targets.py`
+  - `Target` class (stationary or moving targets)
+  - `check_collision(...)`
+  - `closest_approach_between_trajectories(...)`
+
+- `utils.py`
+  - plotting helpers for hit/miss and intercept visualization
+  - `find_launch_angle(...)`
+  - `solve_moving_target_angle(...)`
+  - `solve_interceptor_angle(...)`
+
+- `main.py`
+  - runs phase scenarios:
+    - stationary target
+    - moving target
+    - interceptor missile
+
+## Run
+
+```bash
+python3 main.py
+```
+
+If you are using the local virtual environment:
+
+```bash
+./venv/bin/python main.py
+```
+
+---
+
+# Part 6: Real-Time Animation
+
+Phase 6 Option A is implemented using Matplotlib `FuncAnimation`.
+
+## Implemented items
+
+- **6A.1 Pre-compute trajectory**: simulate first, store `x[i], y[i]`
+- **6A.2 Animate point + trail**: moving missile dot + growing trail
+- **6A.3 Speed control**: frame speed via `interval_ms`
+- **6A.4 Save to GIF**: optional GIF export with Pillow writer
+
+## Run animation
+
+```bash
+./venv/bin/python main.py --mode animate --velocity 300 --angle 35 --interval-ms 30
+```
+
+## Save GIF
+
+```bash
+./venv/bin/python main.py --mode animate --save-gif trajectory.gif --gif-fps 30 --no-show
+```
+
+## Keep using Phase 5 flow
+
+```bash
+./venv/bin/python main.py --mode phase5
+```
+
+## Dependency note
+
+If `python3 main.py` fails with `ModuleNotFoundError: No module named 'numpy'`, use the project virtual environment:
+
+```bash
+./venv/bin/python main.py
+```

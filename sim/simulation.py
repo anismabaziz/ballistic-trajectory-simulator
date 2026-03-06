@@ -1,8 +1,11 @@
 import math
+import random
 import threading
-import time
 
-import numpy as np
+from .autosolve import solve_launch
+from .camera import apply_follow, handle_keyboard, handle_mouse, is_over_controls
+from .drawing import draw_hud
+from .ui import draw_control_panel, refresh_control_layout
 
 
 class _Missile:
@@ -56,6 +59,8 @@ class PygameBallisticSimulation:
         self.launch_speed = float(launch_speed)
         self.launch_elevation_deg = float(launch_elevation_deg)
         self.launch_azimuth_deg = float(launch_azimuth_deg)
+        self.min_launch_elevation_deg = 1.0
+        self.min_auto_solve_elevation_deg = 12.0
         self.target_x = float(target_x)
         self.target_y = 0.0
         self.target_z = 0.0
@@ -120,31 +125,32 @@ class PygameBallisticSimulation:
         self.pan_dragging = False
         self.last_mouse_pos = None
 
+        self._init_environment_visuals()
+
+    def _init_environment_visuals(self):
+        rng = random.Random(7)
+        self._sky_stars = []
+        for _ in range(90):
+            x = rng.randint(0, max(1, self.window_width - 1))
+            y = rng.randint(0, max(1, int(self.window_height * 0.45)))
+            b = rng.randint(120, 255)
+            self._sky_stars.append((x, y, b))
+
     def reset(self):
         self.missiles = []
         self.sim_time = 0.0
         self.target_hit_timer = 0.0
 
     def _initialize_sliders(self, pygame):
-        top = 80
-        spacing = 44
-        width = 220
-        height = 16
-
-        def rect_at(i):
-            return pygame.Rect(self.slider_panel_x + 90, top + i * spacing, width, height)
-
         self.sliders = [
-            _Slider("Wind X", 0.0, 40.0, float(self.base_wind_x_vals[-1]), rect_at(0)),
-            _Slider("Wind Z", -30.0, 30.0, 0.0, rect_at(1)),
-            _Slider("Vert Wind", -15.0, 15.0, 0.0, rect_at(2)),
-            _Slider("Air Density", 0.7, 1.5, self.base_rho, rect_at(3)),
-            _Slider("Drag Coeff", 0.1, 1.2, self.base_drag, rect_at(4)),
-            _Slider("Time Scale", 0.2, 4.0, self.time_scale, rect_at(5)),
+            _Slider("Wind X", 0.0, 40.0, float(self.base_wind_x_vals[-1]), pygame.Rect(0, 0, 1, 1)),
+            _Slider("Wind Z", -30.0, 30.0, 0.0, pygame.Rect(0, 0, 1, 1)),
+            _Slider("Vert Wind", -15.0, 15.0, 0.0, pygame.Rect(0, 0, 1, 1)),
+            _Slider("Air Density", 0.7, 1.5, self.base_rho, pygame.Rect(0, 0, 1, 1)),
+            _Slider("Drag Coeff", 0.1, 1.2, self.base_drag, pygame.Rect(0, 0, 1, 1)),
+            _Slider("Time Scale", 0.2, 4.0, self.time_scale, pygame.Rect(0, 0, 1, 1)),
         ]
-        self.auto_button_rect = pygame.Rect(self.slider_panel_x + 14, self.sliders[-1].rect.bottom + 20, 130, 30)
-        self.follow_button_rect = pygame.Rect(self.slider_panel_x + 154, self.sliders[-1].rect.bottom + 20, 160, 30)
-        self.target_mode_button_rect = pygame.Rect(self.slider_panel_x + 14, self.sliders[-1].rect.bottom + 58, 300, 30)
+        refresh_control_layout(self, pygame)
 
     def _toggle_target_mode(self):
         if abs(self.target_velocity_x) > 1e-9:
@@ -219,34 +225,34 @@ class PygameBallisticSimulation:
     def _start_auto_solver(self):
         if self.auto_solver_running:
             return
+        self.auto_status_text = "Auto solving..."
+        self.auto_status_color = (140, 200, 255)
+        self.auto_solver_running = True
+        self.auto_solver_result = None
+        self.auto_solver_thread = threading.Thread(target=self._auto_solver_worker_simple, daemon=True)
+        self.auto_solver_thread.start()
 
+    def _auto_solver_worker_simple(self):
         snapshot = {
             "target_x_launch": float(self._target_position()[0]),
-            "target_y": float(self.target_y),
-            "target_z": float(self.target_z),
-            "target_radius": float(self.target_radius),
             "target_velocity_x": float(self.target_velocity_x),
+            "target_radius": float(self.target_radius),
             "gravity": float(self.simulator.gravity),
             "mass": float(self.simulator.mass),
             "rho": float(self.simulator.rho),
             "drag_coefficient": float(self.simulator.drag_coefficient),
             "area": float(self.simulator.area),
             "latitude": float(self.simulator.latitude),
-            "alt_levels": np.array(self.simulator.alt_levels, dtype=float),
-            "wind_x_vals": np.array(self.simulator.wind_x_vals, dtype=float),
-            "wind_z_vals": np.array(self.simulator.wind_z_vals, dtype=float),
-            "wind_vertical_vals": np.array(self.simulator.wind_vertical_vals, dtype=float),
-            "time_scale": float(self.time_scale),
-            "wall_start": float(time.perf_counter()),
+            "alt_levels": self.simulator.alt_levels,
+            "wind_x_vals": self.simulator.wind_x_vals,
+            "wind_z_vals": self.simulator.wind_z_vals,
+            "wind_vertical_vals": self.simulator.wind_vertical_vals,
+            "min_auto_elevation": float(self.min_auto_solve_elevation_deg),
+            "max_wall_s": 2.0,
         }
-
-        self.auto_solver_running = True
-        self.auto_solver_result = None
-        self.auto_solver_started_sim_time = float(self.sim_time)
-        self.auto_status_text = "Auto solving..."
-        self.auto_status_color = (140, 200, 255)
-        self.auto_solver_thread = threading.Thread(target=self._auto_solver_worker, args=(snapshot,), daemon=True)
-        self.auto_solver_thread.start()
+        result = solve_launch(snapshot)
+        self.auto_solver_result = result
+        self.auto_solver_running = False
 
     def _simulate_candidate_for_target(self, speed, elevation_deg, azimuth_deg, target_x_start, dt=0.012):
         elev = math.radians(elevation_deg)
@@ -288,240 +294,39 @@ class PygameBallisticSimulation:
 
         return min_d, hit, hit_time
 
-    def _auto_solver_worker(self, snapshot):
-        omega = 7.2921e-5
-
-        def accel(y, vx, vy, vz):
-            wind_x = np.interp(y, snapshot["alt_levels"], snapshot["wind_x_vals"])
-            wind_z = np.interp(y, snapshot["alt_levels"], snapshot["wind_z_vals"])
-            wind_vertical = np.interp(y, snapshot["alt_levels"], snapshot["wind_vertical_vals"])
-
-            vx_rel = vx - wind_x
-            vy_rel = vy - wind_vertical
-            vz_rel = vz - wind_z
-            v_rel = math.sqrt(vx_rel * vx_rel + vy_rel * vy_rel + vz_rel * vz_rel)
-
-            if v_rel > 1e-9:
-                drag_force = 0.5 * snapshot["rho"] * snapshot["drag_coefficient"] * snapshot["area"] * (v_rel * v_rel)
-                ax = -(drag_force / snapshot["mass"]) * (vx_rel / v_rel)
-                ay = -snapshot["gravity"] - (drag_force / snapshot["mass"]) * (vy_rel / v_rel)
-                az = -(drag_force / snapshot["mass"]) * (vz_rel / v_rel)
-            else:
-                ax, ay, az = 0.0, -snapshot["gravity"], 0.0
-
-            ax += 2.0 * omega * vz * math.sin(snapshot["latitude"])
-            az += -2.0 * omega * vx * math.sin(snapshot["latitude"])
-            return ax, ay, az
-
-        def simulate_candidate(speed, elevation_deg, azimuth_deg, dt, target_x_start=None):
-            elev = math.radians(elevation_deg)
-            azim = math.radians(azimuth_deg)
-            vx = speed * math.cos(elev) * math.cos(azim)
-            vy = speed * math.sin(elev)
-            vz = speed * math.cos(elev) * math.sin(azim)
-            x, y, z = 0.0, 0.0, 0.0
-            sim_t = 0.0
-
-            if target_x_start is None:
-                target_x_start = snapshot["target_x_launch"]
-
-            max_time = max(8.0, min(90.0, (2.0 * speed * max(math.sin(elev), 0.05) / snapshot["gravity"]) * 1.5 + 6.0))
-            steps = int(max_time / dt)
-
-            min_d = float("inf")
-            hit = False
-            hit_time = None
-            for _ in range(steps):
-                tx = target_x_start + snapshot["target_velocity_x"] * sim_t
-                dx = x - tx
-                dy = y - snapshot["target_y"]
-                dz = z - snapshot["target_z"]
-                d = math.sqrt(dx * dx + dy * dy + dz * dz)
-                if d < min_d:
-                    min_d = d
-                if d <= snapshot["target_radius"]:
-                    hit = True
-                    hit_time = sim_t
-                    break
-
-                ax, ay, az = accel(y, vx, vy, vz)
-                vx += ax * dt
-                vy += ay * dt
-                vz += az * dt
-                x += vx * dt
-                y += vy * dt
-                z += vz * dt
-                sim_t += dt
-                if y <= 0.0 and sim_t > 0.2:
-                    break
-
-            return min_d, hit, hit_time
-
-        def better(cand, best):
-            if best is None:
-                return True
-            # Prefer actual hits first.
-            if cand[0] != best[0]:
-                return cand[0] < best[0]
-            # Among hits, prefer earlier intercept, then smaller miss distance.
-            if cand[0] == 0:
-                if cand[1] != best[1]:
-                    return cand[1] < best[1]
-                if cand[2] != best[2]:
-                    return cand[2] < best[2]
-                return cand[3] < best[3]
-            # Among misses, minimize miss distance then speed.
-            if cand[2] != best[2]:
-                return cand[2] < best[2]
-            return cand[3] < best[3]
-
-        coarse_speeds = self._linspace(120.0, 1450.0, 17)
-        coarse_elev = self._linspace(4.0, 84.0, 17)
-        coarse_az = self._linspace(-20.0, 20.0, 13)
-
-        # (priority, hit_time, miss_dist, speed, elev, az)
-        best = None
-        counter = 0
-        for s in coarse_speeds:
-            for e in coarse_elev:
-                for a in coarse_az:
-                    d, hit, hit_t = simulate_candidate(s, e, a, dt=0.03)
-                    priority = 0 if hit else 1
-                    hit_t_cmp = hit_t if hit_t is not None else 1e9
-                    cand = (priority, hit_t_cmp, d, s, e, a)
-                    if better(cand, best):
-                        best = cand
-                    counter += 1
-                    if counter % 100 == 0:
-                        time.sleep(0)
-
-        if best is None:
-            self.auto_solver_result = {"ok": False}
+    def _apply_auto_solver_result(self, result):
+        if not result.get("ok"):
+            self.auto_status_text = "Auto solve failed"
+            self.auto_status_color = (255, 140, 140)
             return
 
-        _, _, _, s0, e0, a0 = best
-        speed_steps = [90.0, 45.0, 22.0, 10.0, 5.0]
-        angle_steps = [6.0, 3.0, 1.6, 0.8, 0.4]
-        az_steps = [5.0, 2.5, 1.2, 0.6, 0.3]
+        best_speed = result["speed"]
+        best_angle = result["elevation"]
+        best_azimuth = result["azimuth"]
+        best_d = result["distance"]
+        best_hit = result["hit"]
 
-        cur = best
-        counter = 0
-        for i in range(len(speed_steps)):
-            s_step = speed_steps[i]
-            e_step = angle_steps[i]
-            a_step = az_steps[i]
-            base_s, base_e, base_a = cur[3], cur[4], cur[5]
-            for ds in (-s_step, 0.0, s_step):
-                for de in (-e_step, 0.0, e_step):
-                    for da in (-a_step, 0.0, a_step):
-                        s = min(1500.0, max(80.0, base_s + ds))
-                        e = min(88.0, max(2.0, base_e + de))
-                        a = min(30.0, max(-30.0, base_a + da))
-                        d, hit, hit_t = simulate_candidate(s, e, a, dt=0.012)
-                        priority = 0 if hit else 1
-                        hit_t_cmp = hit_t if hit_t is not None else 1e9
-                        cand = (priority, hit_t_cmp, d, s, e, a)
-                        if better(cand, cur):
-                            cur = cand
-                        counter += 1
-                        if counter % 120 == 0:
-                            time.sleep(0)
+        self.launch_speed = min(2200.0, best_speed)
+        self.launch_elevation_deg = max(self.min_auto_solve_elevation_deg, best_angle)
+        self.launch_azimuth_deg = best_azimuth
+        self._launch_missile()
 
-        wall_elapsed = max(0.0, float(time.perf_counter()) - snapshot["wall_start"])
-        sim_advance = wall_elapsed * max(snapshot["time_scale"], 0.05)
-        predicted_target_x = snapshot["target_x_launch"] + snapshot["target_velocity_x"] * sim_advance
-
-        refine = cur
-        for ds in (-35.0, -15.0, 0.0, 15.0, 35.0):
-            for de in (-2.0, -1.0, 0.0, 1.0, 2.0):
-                for da in (-1.5, -0.7, 0.0, 0.7, 1.5):
-                    s = min(1500.0, max(80.0, cur[3] + ds))
-                    e = min(88.0, max(2.0, cur[4] + de))
-                    a = min(30.0, max(-30.0, cur[5] + da))
-                    d, hit, hit_t = simulate_candidate(
-                        s,
-                        e,
-                        a,
-                        dt=0.009,
-                        target_x_start=predicted_target_x,
-                    )
-
-                    priority = 0 if hit else 1
-                    hit_t_cmp = hit_t if hit_t is not None else 1e9
-                    cand = (priority, hit_t_cmp, d, s, e, a)
-                    if better(cand, refine):
-                        refine = cand
-
-        cur = refine
-
-        self.auto_solver_result = {
-            "ok": True,
-            "distance": cur[2],
-            "speed": cur[3],
-            "elevation": cur[4],
-            "azimuth": cur[5],
-            "hit": cur[0] == 0,
-        }
+        if best_d <= self.target_radius:
+            self.auto_status_text = f"Auto launched hit: {best_speed:.1f}m/s, elev {best_angle:.1f}, az {best_azimuth:.1f}"
+            self.auto_status_color = (120, 240, 150)
+        else:
+            self.auto_status_text = f"Auto launched best: {best_speed:.1f}m/s, elev {best_angle:.1f}, az {best_azimuth:.1f}, miss {best_d:.1f}m"
+            self.auto_status_color = (255, 210, 130)
 
     def _update_auto_solver(self):
-        if not self.auto_solver_running:
+        if self.auto_solver_running:
             return
         if self.auto_solver_result is None:
             return
 
         result = self.auto_solver_result
         self.auto_solver_result = None
-        self.auto_solver_running = False
-
-        if not result.get("ok"):
-            self.auto_status_text = "Auto solve failed"
-            self.auto_status_color = (255, 140, 140)
-            self.auto_solver_started_sim_time = None
-            return
-
-        best_speed = result["speed"]
-        best_angle = result["elevation"]
-        best_azimuth = result["azimuth"]
-
-        elapsed_sim = 0.0
-        if self.auto_solver_started_sim_time is not None:
-            elapsed_sim = max(0.0, self.sim_time - self.auto_solver_started_sim_time)
-        predicted_target_x = self._target_position()[0] + self.target_velocity_x * min(0.35, elapsed_sim * 0.25)
-
-        local_best = (result["distance"], best_speed, best_angle, best_azimuth, result["hit"], 1e9)
-        for ds in (-80.0, -40.0, 0.0, 40.0, 80.0):
-            for de in (-4.0, -2.0, 0.0, 2.0, 4.0):
-                for da in (-3.0, -1.5, 0.0, 1.5, 3.0):
-                    s = min(1500.0, max(80.0, best_speed + ds))
-                    e = min(88.0, max(2.0, best_angle + de))
-                    a = min(30.0, max(-30.0, best_azimuth + da))
-                    d, h, ht = self._simulate_candidate_for_target(s, e, a, predicted_target_x, dt=0.009)
-                    ht_cmp = ht if ht is not None else 1e9
-                    if h and not local_best[4]:
-                        local_best = (d, s, e, a, h, ht_cmp)
-                    elif h and local_best[4] and ht_cmp < local_best[5]:
-                        local_best = (d, s, e, a, h, ht_cmp)
-                    elif (not local_best[4]) and d < local_best[0]:
-                        local_best = (d, s, e, a, h, ht_cmp)
-
-        best_d, best_speed, best_angle, best_azimuth, _, _ = local_best
-        self.auto_solver_started_sim_time = None
-
-        self.launch_speed = best_speed
-        self.launch_elevation_deg = best_angle
-        self.launch_azimuth_deg = best_azimuth
-        self._launch_missile()
-
-        if best_d <= self.target_radius:
-            self.auto_status_text = (
-                f"Auto launched hit: {best_speed:.1f}m/s, elev {best_angle:.1f}, az {best_azimuth:.1f}"
-            )
-            self.auto_status_color = (120, 240, 150)
-        else:
-            self.auto_status_text = (
-                f"Auto launched best: {best_speed:.1f}m/s, elev {best_angle:.1f}, az {best_azimuth:.1f}, miss {best_d:.1f}m"
-            )
-            self.auto_status_color = (255, 210, 130)
+        self._apply_auto_solver_result(result)
 
     def _apply_slider_values(self):
         wind_x_top = self.sliders[0].value
@@ -641,19 +446,29 @@ class PygameBallisticSimulation:
             p1 = self._project(gx, 0.0, z_min)
             p2 = self._project(gx, 0.0, z_max)
             if p1 and p2:
-                pygame.draw.line(screen, (72, 92, 76), (p1[0], p1[1]), (p2[0], p2[1]), 1)
+                depth = max((p1[2] + p2[2]) * 0.5, 1.0)
+                shade = max(40, min(120, int(1600.0 / depth * 130.0)))
+                pygame.draw.line(screen, (38, 55 + shade // 4, 42 + shade // 6), (p1[0], p1[1]), (p2[0], p2[1]), 1)
 
         for gz in range(z_min, z_max + 1, grid_spacing):
             p1 = self._project(x_min, 0.0, gz)
             p2 = self._project(x_max, 0.0, gz)
             if p1 and p2:
-                pygame.draw.line(screen, (72, 92, 76), (p1[0], p1[1]), (p2[0], p2[1]), 1)
+                depth = max((p1[2] + p2[2]) * 0.5, 1.0)
+                shade = max(34, min(108, int(1500.0 / depth * 120.0)))
+                pygame.draw.line(screen, (34, 48 + shade // 5, 40 + shade // 7), (p1[0], p1[1]), (p2[0], p2[1]), 1)
 
         for marker_x in range(0, x_max + 1, 1000):
             p = self._project(marker_x, 0.0, 0.0)
             if p:
-                label = self._font_small.render(f"{marker_x}m", True, (170, 190, 165))
+                label = self._font_small.render(f"{marker_x}m", True, (186, 206, 180))
                 screen.blit(label, (p[0] + 4, p[1] - 10))
+
+        # Main axis highlight for orientation.
+        axis_a = self._project(0.0, 0.0, 0.0)
+        axis_b = self._project(x_max, 0.0, 0.0)
+        if axis_a and axis_b:
+            pygame.draw.line(screen, (132, 208, 152), (axis_a[0], axis_a[1]), (axis_b[0], axis_b[1]), 2)
 
     def _draw_altitude_grid(self, screen, pygame):
         for h in range(250, 2001, 250):
@@ -675,8 +490,14 @@ class PygameBallisticSimulation:
         is_hit = self.target_hit_timer > 0.0
         fill_col = (250, 86, 86) if is_hit else (70, 220, 100)
         edge_col = (148, 20, 20) if is_hit else (36, 110, 60)
+
+        # Target ground shadow.
+        shadow_r = max(3, int(radius_px * 1.35))
+        pygame.draw.ellipse(screen, (16, 24, 18), (base[0] - shadow_r, base[1] - shadow_r // 2, shadow_r * 2, shadow_r))
+
         pygame.draw.circle(screen, fill_col, (body[0], body[1]), radius_px, 0)
         pygame.draw.circle(screen, edge_col, (body[0], body[1]), radius_px, 2)
+        pygame.draw.circle(screen, (255, 255, 255), (body[0] - max(1, radius_px // 3), body[1] - max(1, radius_px // 3)), max(1, radius_px // 4))
         pygame.draw.line(screen, (50, 120, 60), (body[0], body[1]), (base[0], base[1]), 2)
 
         if is_hit:
@@ -813,8 +634,16 @@ class PygameBallisticSimulation:
                     if pr:
                         pts.append((pr[0], pr[1]))
                 if len(pts) >= 2:
-                    col = (120, 255, 165) if missile.hit else (255, 205, 120)
-                    pygame.draw.lines(screen, col, False, pts, 2)
+                    base_col = (120, 255, 165) if missile.hit else (255, 205, 120)
+                    pygame.draw.lines(screen, base_col, False, pts, 2)
+
+                    # Soft glow trail points.
+                    for i in range(0, len(pts), 5):
+                        t = i / max(len(pts) - 1, 1)
+                        r = int(base_col[0] * (0.55 + 0.45 * t))
+                        g = int(base_col[1] * (0.55 + 0.45 * t))
+                        b = int(base_col[2] * (0.55 + 0.45 * t))
+                        pygame.draw.circle(screen, (r, g, b), pts[i], 2)
 
             self._draw_missile_shape(screen, pygame, missile)
 
@@ -836,180 +665,19 @@ class PygameBallisticSimulation:
         return out_y
 
     def _draw_slider_panel(self, screen, pygame):
-        panel_w = self.slider_panel_width
-        panel_h = self.slider_panel_height
-        panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-        panel.fill((16, 22, 30, 206))
-        screen.blit(panel, (self.slider_panel_x, 24))
-
-        title = self._font_title.render("Environment Controls", True, (220, 230, 250))
-        screen.blit(title, (self.slider_panel_x + 14, 35))
-
-        for idx, slider in enumerate(self.sliders):
-            y = 64 + idx * 44
-            lbl = self._font_small.render(f"{slider.name}: {slider.value:.2f}", True, (176, 208, 255))
-            screen.blit(lbl, (self.slider_panel_x + 14, y))
-
-            pygame.draw.rect(screen, (68, 84, 104), slider.rect, border_radius=6)
-            fill_rect = pygame.Rect(slider.rect.x, slider.rect.y, int(slider.rect.width * slider.normalized()), slider.rect.height)
-            pygame.draw.rect(screen, (108, 178, 255), fill_rect, border_radius=6)
-            handle_x = slider.rect.x + int(slider.rect.width * slider.normalized())
-            pygame.draw.circle(screen, (235, 242, 255), (handle_x, slider.rect.y + slider.rect.height // 2), 7)
-
-        if self.auto_button_rect is not None:
-            button_color = (62, 132, 210) if not self.auto_solver_running else (95, 95, 115)
-            pygame.draw.rect(screen, button_color, self.auto_button_rect, border_radius=8)
-            pygame.draw.rect(screen, (110, 170, 235), self.auto_button_rect, width=2, border_radius=8)
-            button_name = "Auto Solve" if not self.auto_solver_running else "Solving..."
-            button_label = self._font_small.render(button_name, True, (240, 246, 255))
-            screen.blit(button_label, (self.auto_button_rect.x + 25, self.auto_button_rect.y + 7))
-
-        if self.follow_button_rect is not None:
-            follow_color = (68, 150, 110) if self.camera_follow_target else (110, 88, 88)
-            pygame.draw.rect(screen, follow_color, self.follow_button_rect, border_radius=8)
-            pygame.draw.rect(screen, (190, 220, 205), self.follow_button_rect, width=2, border_radius=8)
-            follow_text = "Cam Follow: ON" if self.camera_follow_target else "Cam Follow: OFF"
-            screen.blit(self._font_small.render(follow_text, True, (245, 248, 255)), (self.follow_button_rect.x + 12, self.follow_button_rect.y + 7))
-
-        if self.target_mode_button_rect is not None:
-            moving = abs(self.target_velocity_x) > 1e-9
-            mode_color = (72, 138, 205) if moving else (108, 108, 120)
-            pygame.draw.rect(screen, mode_color, self.target_mode_button_rect, border_radius=8)
-            pygame.draw.rect(screen, (176, 208, 246), self.target_mode_button_rect, width=2, border_radius=8)
-            mode_text = f"Target Mode: {'Moving' if moving else 'Stationary'} (toggle)"
-            screen.blit(self._font_small.render(mode_text, True, (242, 247, 255)), (self.target_mode_button_rect.x + 12, self.target_mode_button_rect.y + 7))
-
-        if self.auto_status_text:
-            status_x = self.slider_panel_x + 14
-            anchor_y = 320
-            target_mode_rect = self.target_mode_button_rect
-            auto_rect = self.auto_button_rect
-            if target_mode_rect is not None:
-                anchor_y = target_mode_rect.bottom + 10
-            elif auto_rect is not None:
-                anchor_y = auto_rect.bottom + 8
-            status_end_y = self._draw_wrapped_text(
-                screen,
-                self._font_small,
-                self.auto_status_text,
-                self.auto_status_color,
-                status_x,
-                anchor_y,
-                panel_w - 28,
-                16,
-            )
-        else:
-            status_end_y = (self.target_mode_button_rect.bottom + 8) if self.target_mode_button_rect is not None else 320
-
-        help_lines = [
-            "Mouse L-drag orbit, R-drag pan, wheel zoom.",
-            "IJKLUO camera keys, WASD pan keys.",
-            "C toggle camera-follow, M target mode toggle.",
-            "SPACE launch, R reset, V camera reset.",
-            "Arrows speed/elevation, Q/E azimuth, T/G target vx.",
-        ]
-        target_mode_rect = self.target_mode_button_rect
-        y = max((target_mode_rect.bottom + 48) if target_mode_rect is not None else 320, status_end_y + 8)
-        max_text_width = panel_w - 28
-        for line in help_lines:
-            y = self._draw_wrapped_text(
-                screen,
-                self._font_small,
-                line,
-                (160, 190, 175),
-                self.slider_panel_x + 14,
-                y,
-                max_text_width,
-                16,
-            )
+        draw_control_panel(self, screen, pygame)
 
     def _draw_hud(self, screen, pygame):
-        panel = pygame.Surface((620, 188), pygame.SRCALPHA)
-        panel.fill((9, 14, 22, 196))
-        screen.blit(panel, (12, 12))
-
-        active = sum(1 for m in self.missiles if m.alive)
-        hits = sum(1 for m in self.missiles if m.hit)
-        closest = min((m.closest_distance for m in self.missiles), default=float("inf"))
-        closest_text = "N/A" if math.isinf(closest) else f"{closest:.2f} m"
-
-        lines = [
-            "Interactive 3D Ballistic Simulator",
-            f"Launch: {self.launch_speed:.1f} m/s | Elev {self.launch_elevation_deg:.1f} deg | Azi {self.launch_azimuth_deg:.1f} deg",
-            f"Target: x0 {self.target_x:.0f} m | vx {self.target_velocity_x:.1f} m/s ({'moving' if abs(self.target_velocity_x) > 1e-9 else 'stationary'}) | radius {self.target_radius:.1f} m",
-            f"Target state: {'HIT' if self.target_hit_timer > 0.0 else 'ACTIVE'}",
-            f"Missiles: total {len(self.missiles)} | active {active} | hits {hits}",
-            f"Closest approach: {closest_text} | Sim time: {self.sim_time:.2f} s",
-        ]
-
-        y = 22
-        for idx, line in enumerate(lines):
-            col = (238, 243, 255) if idx == 0 else (194, 210, 234)
-            text_surface = self._font_main.render(line, True, col)
-            screen.blit(text_surface, (24, y))
-            y += 33
-
-        controls = "Controls: SPACE launch | R reset | Arrows speed/elevation | Q/E azimuth | T/G target speed"
-        controls_2 = "C follow-cam | M target mode | V camera reset | SHIFT = faster camera"
-        screen.blit(self._font_small.render(controls, True, (148, 196, 170)), (24, 174))
-        screen.blit(self._font_small.render(controls_2, True, (140, 182, 160)), (24, 192))
+        draw_hud(self, screen, pygame)
 
     def _is_over_slider_panel(self, pos):
-        mx, my = pos
-        return (
-            self.slider_panel_x <= mx <= self.slider_panel_x + self.slider_panel_width
-            and 24 <= my <= 24 + self.slider_panel_height
-        )
+        return is_over_controls(self, pos)
 
     def _apply_camera_follow(self, dt):
-        if not self.camera_follow_target:
-            return
-        tx, ty, tz = self._target_position()
-        lead_t = 0.8
-        tx = tx + self.target_velocity_x * lead_t
-
-        desired_x = tx + self.camera_follow_offset_x
-        desired_y = max(40.0, ty + self.camera_follow_offset_y)
-        desired_z = tz + self.camera_follow_offset_z
-
-        k = min(1.0, dt * 4.5)
-        self._camera_target_x_goal += (desired_x - self._camera_target_x_goal) * k
-        self._camera_target_y_goal += (desired_y - self._camera_target_y_goal) * k
-        self._camera_target_z_goal += (desired_z - self._camera_target_z_goal) * k
+        apply_follow(self, dt)
 
     def _handle_mouse_camera(self, event, pygame):
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1 and not self._is_over_slider_panel(event.pos):
-                self.orbit_dragging = True
-                self.last_mouse_pos = event.pos
-            elif event.button == 3 and not self._is_over_slider_panel(event.pos):
-                self.pan_dragging = True
-                self.last_mouse_pos = event.pos
-            elif event.button == 4:
-                self._camera_distance_goal = max(600.0, self._camera_distance_goal * 0.92)
-            elif event.button == 5:
-                self._camera_distance_goal = min(16000.0, self._camera_distance_goal * 1.08)
-        elif event.type == pygame.MOUSEBUTTONUP:
-            if event.button == 1:
-                self.orbit_dragging = False
-            elif event.button == 3:
-                self.pan_dragging = False
-        elif event.type == pygame.MOUSEMOTION and self.last_mouse_pos is not None:
-            dx = event.pos[0] - self.last_mouse_pos[0]
-            dy = event.pos[1] - self.last_mouse_pos[1]
-            self.last_mouse_pos = event.pos
-
-            if self.orbit_dragging:
-                self._camera_yaw_goal += dx * 0.22
-                self._camera_pitch_goal = max(-8.0, min(85.0, self._camera_pitch_goal - dy * 0.18))
-            elif self.pan_dragging:
-                pan_scale = 1.8
-                if self.camera_follow_target:
-                    self.camera_follow_offset_x -= dx * pan_scale
-                    self.camera_follow_offset_y += dy * pan_scale
-                else:
-                    self._camera_target_x_goal -= dx * pan_scale
-                    self._camera_target_y_goal += dy * pan_scale
+        handle_mouse(self, event, pygame)
 
     def _axis_input(self, negative_pressed, positive_pressed):
         value = 0.0
@@ -1029,10 +697,22 @@ class PygameBallisticSimulation:
     def _draw_scene(self, screen, pygame):
         for row in range(self.window_height):
             t = row / max(self.window_height - 1, 1)
-            r = int(11 * (1 - t) + 32 * t)
-            g = int(19 * (1 - t) + 60 * t)
-            b = int(34 * (1 - t) + 98 * t)
+            r = int(8 * (1 - t) + 44 * t)
+            g = int(16 * (1 - t) + 74 * t)
+            b = int(30 * (1 - t) + 118 * t)
             pygame.draw.line(screen, (r, g, b), (0, row), (self.window_width, row))
+
+        # Sun glow.
+        sun_x = int(self.window_width * 0.16)
+        sun_y = int(self.window_height * 0.18)
+        for rad, alpha in ((82, 30), (52, 55), (24, 140)):
+            surf = pygame.Surface((rad * 2, rad * 2), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (255, 215, 145, alpha), (rad, rad), rad)
+            screen.blit(surf, (sun_x - rad, sun_y - rad))
+
+        # Stars.
+        for sx, sy, b in self._sky_stars:
+            screen.set_at((sx, sy), (b, b, min(255, b + 10)))
 
         self._draw_ground_grid(screen, pygame)
         self._draw_altitude_grid(screen, pygame)
@@ -1059,28 +739,7 @@ class PygameBallisticSimulation:
         self._camera_target_z_goal = self.camera_target_z
 
     def _handle_pressed_keys(self, keys, dt, pygame):
-        speed_scale = 2.0 if (keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]) else 1.0
-        yaw_input = self._axis_input(keys[pygame.K_j], keys[pygame.K_l])
-        pitch_input = self._axis_input(keys[pygame.K_k], keys[pygame.K_i])
-        zoom_input = self._axis_input(keys[pygame.K_o], keys[pygame.K_u])
-        pan_x_input = self._axis_input(keys[pygame.K_a], keys[pygame.K_d])
-        pan_z_input = self._axis_input(keys[pygame.K_w], keys[pygame.K_s])
-
-        self._camera_yaw_velocity = self._smooth_velocity(self._camera_yaw_velocity, yaw_input * 70.0 * speed_scale, dt)
-        self._camera_pitch_velocity = self._smooth_velocity(self._camera_pitch_velocity, pitch_input * 55.0 * speed_scale, dt)
-        self._camera_zoom_velocity = self._smooth_velocity(self._camera_zoom_velocity, zoom_input * 1200.0 * speed_scale, dt)
-        self._camera_pan_x_velocity = self._smooth_velocity(self._camera_pan_x_velocity, pan_x_input * 520.0 * speed_scale, dt)
-        self._camera_pan_z_velocity = self._smooth_velocity(self._camera_pan_z_velocity, pan_z_input * 520.0 * speed_scale, dt)
-
-        self._camera_yaw_goal += self._camera_yaw_velocity * dt
-        self._camera_pitch_goal = max(-10.0, min(80.0, self._camera_pitch_goal + self._camera_pitch_velocity * dt))
-        self._camera_distance_goal = max(600.0, min(16000.0, self._camera_distance_goal + self._camera_zoom_velocity * dt))
-        if self.camera_follow_target:
-            self.camera_follow_offset_x += self._camera_pan_x_velocity * dt
-            self.camera_follow_offset_z += self._camera_pan_z_velocity * dt
-        else:
-            self._camera_target_x_goal += self._camera_pan_x_velocity * dt
-            self._camera_target_z_goal += self._camera_pan_z_velocity * dt
+        handle_keyboard(self, keys, dt, pygame)
 
     def _handle_slider_events(self, event, pygame):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -1117,11 +776,13 @@ class PygameBallisticSimulation:
         elif key == pygame.K_r:
             self.reset()
         elif key == pygame.K_UP:
-            self.launch_elevation_deg = min(89.0, self.launch_elevation_deg + 1.0)
+            step = 5.0 if (pygame.key.get_mods() & pygame.KMOD_SHIFT) else 1.0
+            self.launch_elevation_deg = min(89.0, self.launch_elevation_deg + step)
         elif key == pygame.K_DOWN:
-            self.launch_elevation_deg = max(1.0, self.launch_elevation_deg - 1.0)
+            step = 5.0 if (pygame.key.get_mods() & pygame.KMOD_SHIFT) else 1.0
+            self.launch_elevation_deg = max(self.min_launch_elevation_deg, self.launch_elevation_deg - step)
         elif key == pygame.K_RIGHT:
-            self.launch_speed = min(1500.0, self.launch_speed + 5.0)
+            self.launch_speed = min(2200.0, self.launch_speed + 5.0)
         elif key == pygame.K_LEFT:
             self.launch_speed = max(1.0, self.launch_speed - 5.0)
         elif key == pygame.K_t:
@@ -1140,19 +801,18 @@ class PygameBallisticSimulation:
             self._reset_camera_view()
 
     def run(self):
-        try:
-            import pygame
-        except ImportError as exc:
-            raise RuntimeError("pygame is not installed. Install it in your venv with: ./venv/bin/pip install pygame") from exc
+        import pygame
 
         pygame.init()
         pygame.display.set_caption("Ballistic Simulator - Interactive 3D Close-to-Life Mode")
+
         screen = pygame.display.set_mode((self.window_width, self.window_height))
         clock = pygame.time.Clock()
 
         self._font_main = pygame.font.SysFont("consolas", 20)
         self._font_small = pygame.font.SysFont("consolas", 16)
         self._font_title = pygame.font.SysFont("consolas", 22)
+
         self._initialize_sliders(pygame)
         self._begin_camera_goals()
 
@@ -1165,6 +825,7 @@ class PygameBallisticSimulation:
                     self.running = False
                 elif event.type == pygame.KEYDOWN:
                     self._handle_keydown(event.key, pygame)
+
                 self._handle_slider_events(event, pygame)
                 self._handle_mouse_camera(event, pygame)
 
@@ -1177,6 +838,7 @@ class PygameBallisticSimulation:
             self._update_physics(dt * self.time_scale)
             self._update_auto_solver()
             self._draw_scene(screen, pygame)
+
             pygame.display.flip()
 
         pygame.quit()

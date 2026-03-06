@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
 from physics import BallisticPhysics
-from pygame_simulation import PygameBallisticSimulation
+from sim.simulation import PygameBallisticSimulation
 from targets import Target, check_collision
 from utils import (
     animate_trajectory,

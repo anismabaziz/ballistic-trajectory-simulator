@@ -53,3 +53,11 @@ we can get it also from horizontal speed \* time taken
 sin(2theta) comes from combining horizontal and vertial speed
 
 maximum range is when theta is 45 degrees
+
+# Part 2:
+
+## Optimum angle finder
+
+the optimal angle is the that acheives the heighest horizontal range
+max horizontal range is achieved when sin(2theta) == 1 => 2theta = 90deg
+this means theta is 45deg

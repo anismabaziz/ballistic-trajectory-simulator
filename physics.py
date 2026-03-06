@@ -1,6 +1,5 @@
 import numpy as np
-
-G = 9.81
+from config import G
 
 
 """ 
@@ -28,6 +27,9 @@ def trajectory(v: float, angle_degree: float, g: float = G):
 
   # compute vertical position for each time value 
   y = v * np.sin(a) * t - .5 * g * t**2
+
+  # clip underground vertical position
+  y = np.clip(y, 0, None)
 
   # compute the max horizontal range
   R = (v**2 * np.sin(2*a)) / g

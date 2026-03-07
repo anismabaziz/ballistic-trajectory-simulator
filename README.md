@@ -1,9 +1,43 @@
 # Ballistic Trajectory Simulator
 
+## Setup
+
+Create Project Virtual Environment
+
+```bash
+python3 -m venv venv
+```
+
+Activate Virtual Environment
+
+**macOS / Linux**
+
+```bash
+source venv/bin/activate
+```
+
+**Windows (Command Prompt)**
+
+```cmd
+venv\Scripts\activate.bat
+```
+
+**Windows (PowerShell)**
+
+```powershell
+venv\Scripts\Activate.ps1
+```
+
+Install Packages via `requirements.txt`
+
+```bash
+pip install -r requirements.txt
+```
+
 Run the simulator with the project virtual environment:
 
 ```bash
-./venv/bin/python main.py --mode target-intercept
+python3 main.py --mode target-intercept
 ```
 
 ## Modes
@@ -15,40 +49,40 @@ Run the simulator with the project virtual environment:
 
 ## Examples
 
-Target interception flow:
+Target interception flow example command:
 
 ```bash
-./venv/bin/python main.py --mode target-intercept --launch-speed 300
+python3 main.py --mode target-intercept --launch-speed 300
 ```
 
-Real-time animation with moving target:
+Real-time animation with moving target example command:
 
 ```bash
-./venv/bin/python main.py --mode real-time-animation --launch-speed 300 --launch-elevation-deg 35 --target-x 2800 --target-velocity-x 40 --target-radius 20
+python3 main.py --mode real-time-animation --launch-speed 300 --launch-elevation-deg 35 --target-x 2800 --target-velocity-x 40 --target-radius 20
 ```
 
-Save animation GIF (headless):
+Save animation GIF (headless) example command:
 
 ```bash
-./venv/bin/python main.py --mode real-time-animation --output-gif-path trajectory.gif --output-gif-fps 30 --headless
+python3 main.py --mode real-time-animation --output-gif-path trajectory.gif --output-gif-fps 30 --headless
 ```
 
-3D single trajectory:
+3D single trajectory example command:
 
 ```bash
-./venv/bin/python main.py --mode three-d-simulation --launch-speed 300 --launch-elevation-deg 35 --launch-azimuth-deg 10
+python3 main.py --mode three-d-simulation --launch-speed 300 --launch-elevation-deg 35 --launch-azimuth-deg 10
 ```
 
-3D salvo:
+3D salvo example command:
 
 ```bash
-./venv/bin/python main.py --mode three-d-simulation --launch-speed 300 --launch-elevation-deg 35 --enable-salvo --salvo-missile-count 11 --salvo-azimuth-span-deg 40
+python3 main.py --mode three-d-simulation --launch-speed 300 --launch-elevation-deg 35 --enable-salvo --salvo-missile-count 11 --salvo-azimuth-span-deg 40
 ```
 
-Interactive simulator:
+Interactive simulator example command:
 
 ```bash
-./venv/bin/python main.py --mode interactive-simulator --launch-speed 300 --launch-elevation-deg 35 --launch-azimuth-deg 5 --target-x 2800 --target-velocity-x 40 --target-radius 20
+python3 main.py --mode interactive-simulator --launch-speed 300 --launch-elevation-deg 35 --launch-azimuth-deg 5 --target-x 2800 --target-velocity-x 40 --target-radius 20
 ```
 
 Interactive controls:
@@ -83,11 +117,3 @@ Interactive controls:
 - `--enable-salvo`: enable multi-missile azimuth spread (3D mode)
 - `--salvo-missile-count`: number of missiles in salvo
 - `--salvo-azimuth-span-deg`: total azimuth span across salvo in degrees
-
-If `python3 main.py` fails with `ModuleNotFoundError` (e.g., `numpy`), use `./venv/bin/python`.
-
-If pygame is missing, install it in the venv:
-
-```bash
-./venv/bin/pip install pygame
-```

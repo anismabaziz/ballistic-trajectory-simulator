@@ -34,6 +34,13 @@ Install Packages via `requirements.txt`
 pip install -r requirements.txt
 ```
 
+The test suite needs pytest on top of that.
+
+```bash
+pip install -e ".[test]"
+pytest
+```
+
 Run the simulator with the project virtual environment. `--headless` skips the
 plotting window and works on a machine with no display; drop it to watch the
 plots.

@@ -5,4 +5,14 @@ __pycache__/
 # Virtual environment
 venv/
 .env
-*.gif
+
+# Packaging build artifacts
+build/
+dist/
+*.egg-info/
+
+# Operating system metadata
+.DS_Store
+
+# Planning artifacts, local only
+.plan/

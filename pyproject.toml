@@ -14,14 +14,20 @@ authors = [{ name = "anismabaziz" }]
 keywords = ["ballistics", "trajectory", "physics", "simulation"]
 classifiers = [
     "Intended Audience :: Science/Research",
-    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Physics",
 ]
+
+# Floors, not pins. requirements.txt holds the exact versions the documented
+# physics results were computed against.
 dependencies = [
-    "matplotlib==3.10.8",
-    "numpy==2.4.2",
-    "pygame==2.6.1",
-    "scipy==1.17.1",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.2",
+    "pillow>=12.1.1",
+    "pygame>=2.6.1",
+    "scipy>=1.17.1",
 ]
 
 [tool.setuptools]

@@ -19,12 +19,12 @@ PLOTTING_AND_RENDERER = ("matplotlib", "pygame", "sim")
 
 
 def installed_distribution():
-    """The distribution pip installed, ignoring the egg-info a build leaves in the tree.
+    """The installed distribution, ignoring the egg-info a build leaves in the tree.
 
     Running from the repository root puts that egg-info on sys.path ahead of
     site-packages. It describes the same distribution but records no install, so
     metadata questions about the install have to skip past it. `.dist-info` is
-    the shape pip writes; the private `_path` attribute is the only way to tell
+    the shape an installer writes; the private `_path` attribute is the only way to tell
     the two apart, since `metadata.distributions()` gives no public accessor.
     """
     candidates = [
@@ -46,9 +46,9 @@ def declared_dependencies():
 def declared_modules():
     """Top-level module and package names the install makes importable.
 
-    Read from the installed metadata rather than hardcoded, so ticket 14's move
-    into the ballistics package does not silently stop this file from covering
-    the code that moved.
+    Read from the installed metadata rather than hardcoded, so a move into the
+    ballistics package does not silently stop this file from covering the code
+    that moved.
     """
     distribution = installed_distribution()
     if distribution is None:
@@ -111,7 +111,7 @@ def run_in_unrelated_directory(code, tmp_path):
 
 def test_the_project_is_installed_in_editable_mode():
     distribution = installed_distribution()
-    assert distribution is not None, f"run `pip install -e .` from {PROJECT_ROOT}"
+    assert distribution is not None, f"run `uv sync` in {PROJECT_ROOT}"
 
     direct_url = distribution.read_text("direct_url.json")
     assert direct_url is not None, "expected an editable install, found a copied one"
@@ -143,8 +143,8 @@ def test_the_physics_and_target_interfaces_import_without_the_plotting_or_render
 
     The three searches are not in this test because they share `utils` with the
     four matplotlib plotting functions, so importing a search still costs a
-    matplotlib import. Ticket 14 separates them; this widens to the searches
-    then, and to the ballistics package after ticket 13.
+    matplotlib import. Separating them widens this to the searches, and moving
+    the ballistics code into a package widens it further.
     """
     result = run_in_unrelated_directory(
         f"""

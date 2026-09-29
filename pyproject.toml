@@ -19,8 +19,8 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 
-# Floors, not pins. requirements.txt holds the exact versions the documented
-# physics results were computed against.
+# Floors, not pins. uv.lock holds the exact versions the documented physics
+# results were computed against.
 dependencies = [
     "matplotlib>=3.10.8",
     "numpy>=2.4.2",
@@ -29,8 +29,10 @@ dependencies = [
     "scipy>=1.17.1",
 ]
 
-[project.optional-dependencies]
-test = ["pytest>=8.0"]
+[dependency-groups]
+# uv installs this group by default, so `uv sync` leaves a checkout ready to run
+# the suite. `packaging` is named here because the packaging test imports it.
+dev = ["packaging>=24.0", "pytest>=8.0"]
 
 [tool.setuptools]
 py-modules = ["config", "physics", "targets", "utils"]

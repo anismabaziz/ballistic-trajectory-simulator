@@ -4,54 +4,31 @@
 
 ## Setup
 
-Needs Python 3.11 or newer, which is what the pinned numpy and scipy releases
-require.
+Needs Python 3.11 or newer, which is what the numpy and scipy floors in
+`pyproject.toml` require. [uv](https://docs.astral.sh/uv/) handles the
+interpreter, the environment, and the lockfile.
 
-Create Project Virtual Environment
-
-```bash
-python3 -m venv venv
-```
-
-Activate Virtual Environment
-
-**macOS / Linux**
+Install the project and its test dependencies into `.venv`:
 
 ```bash
-source venv/bin/activate
+uv sync
 ```
 
-**Windows (Command Prompt)**
+`uv.lock` is committed and holds the exact versions the documented physics
+results were computed against. `uv sync` installs from it, so a fresh checkout
+resolves to the same numbers this README reports.
 
-```cmd
-venv\Scripts\activate.bat
-```
-
-**Windows (PowerShell)**
-
-```powershell
-venv\Scripts\Activate.ps1
-```
-
-Install Packages via `requirements.txt`
+Run the test suite:
 
 ```bash
-pip install -r requirements.txt
+uv run pytest
 ```
 
-The test suite needs pytest on top of that.
+Run the simulator. `--headless` skips the plotting window and works on a
+machine with no display; drop it to watch the plots.
 
 ```bash
-pip install -e ".[test]"
-pytest
-```
-
-Run the simulator with the project virtual environment. `--headless` skips the
-plotting window and works on a machine with no display; drop it to watch the
-plots.
-
-```bash
-python3 main.py --mode target-intercept --headless
+uv run python main.py --mode target-intercept --headless
 ```
 
 ## Modes
@@ -74,37 +51,37 @@ since it renders frames without opening a window.
 Target interception flow example command:
 
 ```bash
-python3 main.py --mode target-intercept --launch-speed 300 --headless
+uv run python main.py --mode target-intercept --launch-speed 300 --headless
 ```
 
 Real-time animation with moving target example command:
 
 ```bash
-python3 main.py --mode real-time-animation --launch-speed 300 --launch-elevation-deg 35 --target-x 2800 --target-velocity-x 40 --target-radius 20
+uv run python main.py --mode real-time-animation --launch-speed 300 --launch-elevation-deg 35 --target-x 2800 --target-velocity-x 40 --target-radius 20
 ```
 
 Save animation GIF (headless) example command:
 
 ```bash
-python3 main.py --mode real-time-animation --output-gif-path trajectory.gif --output-gif-fps 30 --headless
+uv run python main.py --mode real-time-animation --output-gif-path trajectory.gif --output-gif-fps 30 --headless
 ```
 
 3D single trajectory example command:
 
 ```bash
-python3 main.py --mode three-d-simulation --launch-speed 300 --launch-elevation-deg 35 --launch-azimuth-deg 10
+uv run python main.py --mode three-d-simulation --launch-speed 300 --launch-elevation-deg 35 --launch-azimuth-deg 10
 ```
 
 3D salvo example command:
 
 ```bash
-python3 main.py --mode three-d-simulation --launch-speed 300 --launch-elevation-deg 35 --enable-salvo --salvo-missile-count 11 --salvo-azimuth-span-deg 40
+uv run python main.py --mode three-d-simulation --launch-speed 300 --launch-elevation-deg 35 --enable-salvo --salvo-missile-count 11 --salvo-azimuth-span-deg 40
 ```
 
 Interactive simulator example command:
 
 ```bash
-python3 main.py --mode interactive-simulator --launch-speed 300 --launch-elevation-deg 35 --launch-azimuth-deg 5 --target-x 2800 --target-velocity-x 40 --target-radius 20
+uv run python main.py --mode interactive-simulator --launch-speed 300 --launch-elevation-deg 35 --launch-azimuth-deg 5 --target-x 2800 --target-velocity-x 40 --target-radius 20
 ```
 
 Interactive controls:

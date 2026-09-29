@@ -34,10 +34,12 @@ Install Packages via `requirements.txt`
 pip install -r requirements.txt
 ```
 
-Run the simulator with the project virtual environment:
+Run the simulator with the project virtual environment. `--headless` skips the
+plotting window and works on a machine with no display; drop it to watch the
+plots.
 
 ```bash
-python3 main.py --mode target-intercept
+python3 main.py --mode target-intercept --headless
 ```
 
 ## Modes
@@ -47,12 +49,20 @@ python3 main.py --mode target-intercept
 - `three-d-simulation`: runs 3D simulation with optional target, curvature, and salvo
 - `interactive-simulator`: runs an interactive close-to-life pygame window
 
+## Headless
+
+`--headless` works in every mode except `interactive-simulator`, which opens a
+pygame window and needs a display to run at all. Passing the flag selects the
+non-interactive matplotlib backend and skips the plotting window, so the mode
+still computes and prints its results. The GIF export path takes the flag too,
+since it renders frames without opening a window.
+
 ## Examples
 
 Target interception flow example command:
 
 ```bash
-python3 main.py --mode target-intercept --launch-speed 300
+python3 main.py --mode target-intercept --launch-speed 300 --headless
 ```
 
 Real-time animation with moving target example command:
@@ -111,8 +121,8 @@ Interactive controls:
 - `--frame-interval-ms`: animation frame interval in milliseconds
 - `--output-gif-path`: GIF output path for animation
 - `--output-gif-fps`: GIF frame rate
-- `--headless`: do not open plotting window
-- `--mode interactive-simulator` ignores `--headless`
+- `--headless`: do not open a plotting window, honored by every mode except
+  `interactive-simulator`
 - `--enable-earth-curvature`: apply Earth curvature correction (3D mode)
 - `--enable-salvo`: enable multi-missile azimuth spread (3D mode)
 - `--salvo-missile-count`: number of missiles in salvo

@@ -1,4 +1,5 @@
 import argparse
+import matplotlib
 import numpy as np
 from physics import BallisticPhysics
 from sim.simulation import PygameBallisticSimulation
@@ -15,7 +16,7 @@ from utils import (
 )
 
 
-def run_stationary_target_scenario(simulator, v0=300.0, target_x=3500.0, target_radius=10.0):
+def run_stationary_target_scenario(simulator, v0=300.0, target_x=3500.0, target_radius=10.0, show_plot=True):
     target = Target(x=target_x, radius=target_radius)
 
     theta_hit = find_launch_angle(v0, target.x, trajectory_func=simulator.trajectory_3d)
@@ -38,12 +39,13 @@ def run_stationary_target_scenario(simulator, v0=300.0, target_x=3500.0, target_
         target_positions=target_positions,
         closest_distance=closest_distance,
         title="Stationary target collision check",
+        show_plot=show_plot,
     )
 
     return theta_hit, (xs, ys, zs), t_arr
 
 
-def run_moving_target_scenario(simulator, v0=300.0, target_x=3000.0, target_radius=20.0, vx=40.0):
+def run_moving_target_scenario(simulator, v0=300.0, target_x=3000.0, target_radius=20.0, vx=40.0, show_plot=True):
     moving_target = Target(x=target_x, radius=target_radius, vx=vx)
     result = solve_moving_target_angle(v0, moving_target, trajectory_func=simulator.trajectory_3d)
 
@@ -66,26 +68,39 @@ def run_moving_target_scenario(simulator, v0=300.0, target_x=3000.0, target_radi
         target_positions=target_positions,
         closest_distance=result["closest_distance"],
         title="Moving target interception",
+        show_plot=show_plot,
     )
 
     return result
 
 
-def run_interceptor_scenario(simulator, primary_traj, primary_time, interceptor_speed=320.0):
+def run_interceptor_scenario(
+    simulator,
+    primary_traj,
+    primary_time,
+    interceptor_speed=320.0,
+    show_plot=True,
+):
+    primary_positions = np.column_stack(primary_traj)
     result = solve_interceptor_angle(
-        primary_traj,
+        primary_positions,
         primary_time,
         interceptor_speed,
         trajectory_func=simulator.trajectory_3d,
     )
-    interceptor_traj = result["trajectory"]
+    interceptor_traj = np.column_stack(result["trajectory"])
 
+    # Both projectiles leave the same origin, so their separation is smallest at
+    # the launch instant no matter which angle the search picks. The metric is
+    # reported, but a hit verdict here would not mean anything. Closing the
+    # geometry needs a launch delay, which is not implemented.
     print("\n=== Interceptor result ===")
     print(f"Interceptor launch angle: {result['angle']:.2f} degrees")
-    print(f"Closest missile-to-missile distance: {result['closest_distance']:.2f} m")
+    print(f"Miss distance: {result['closest_distance']:.2f} m")
     print(f"Time of closest approach: {result['shared_time']:.3f} s")
+    print("Hit: not determined, both projectiles share a launch point")
 
-    plot_intercept_trajectories(primary_traj, interceptor_traj)
+    plot_intercept_trajectories(primary_positions, interceptor_traj, show_plot=show_plot)
 
 
 def run_real_time_animation(
@@ -195,6 +210,7 @@ def run_three_d_simulation(
     salvo=False,
     salvo_count=9,
     salvo_span=30.0,
+    show_plot=True,
 ):
     if salvo:
         half_span = float(salvo_span) * 0.5
@@ -205,6 +221,7 @@ def run_three_d_simulation(
             angle_deg,
             azimuth_values,
             apply_earth_curvature=apply_earth_curvature,
+            show_plot=show_plot,
         )
         return
 
@@ -233,11 +250,15 @@ def run_three_d_simulation(
         target_positions=target_positions,
         target_radius=target_radius if target_positions is not None else None,
         title="3D Simulation",
+        show_plot=show_plot,
     )
 
 
 def main():
     args = build_cli_parser().parse_args()
+    if args.headless:
+        matplotlib.use("Agg")
+    show_plot = not args.headless
     simulator = BallisticPhysics()
 
     if args.mode == "real-time-animation":
@@ -251,7 +272,7 @@ def main():
             interval_ms=args.frame_interval_ms,
             save_gif_path=args.output_gif_path,
             gif_fps=args.output_gif_fps,
-            show_plot=not args.headless,
+            show_plot=show_plot,
         )
         return
 
@@ -268,6 +289,7 @@ def main():
             salvo=args.enable_salvo,
             salvo_count=args.salvo_missile_count,
             salvo_span=args.salvo_azimuth_span_deg,
+            show_plot=show_plot,
         )
         return
 
@@ -283,9 +305,13 @@ def main():
         )
         return
 
-    _, stationary_traj, stationary_time = run_stationary_target_scenario(simulator, v0=args.launch_speed)
-    run_moving_target_scenario(simulator, v0=args.launch_speed)
-    run_interceptor_scenario(simulator, stationary_traj, stationary_time)
+    _, stationary_traj, stationary_time = run_stationary_target_scenario(
+        simulator,
+        v0=args.launch_speed,
+        show_plot=show_plot,
+    )
+    run_moving_target_scenario(simulator, v0=args.launch_speed, show_plot=show_plot)
+    run_interceptor_scenario(simulator, stationary_traj, stationary_time, show_plot=show_plot)
 
 
 if __name__ == "__main__":

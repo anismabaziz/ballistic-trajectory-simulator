@@ -10,6 +10,13 @@ from targets import check_collision, closest_approach_between_trajectories
 DEFAULT_SIMULATOR = BallisticPhysics()
 
 
+def show_or_close(fig, show_plot):
+    if show_plot:
+        plt.show()
+    else:
+        plt.close(fig)
+
+
 def plot_trajectory(
     xs,
     ys,
@@ -20,8 +27,9 @@ def plot_trajectory(
     target_positions=None,
     closest_distance=None,
     title="Missile Trajectory",
+    show_plot=True,
 ):
-    plt.figure(figsize=(10, 5))
+    fig = plt.figure(figsize=(10, 5))
     plt.plot(xs, ys, label="Missile Path")
 
     if target_positions is None:
@@ -73,7 +81,7 @@ def plot_trajectory(
     plt.title(title)
     plt.legend()
     plt.grid(True)
-    plt.show()
+    show_or_close(fig, show_plot)
 
 
 def find_launch_angle(v0, target_x, trajectory_func=None):
@@ -195,8 +203,13 @@ def solve_interceptor_angle(primary_traj, primary_time, interceptor_speed, traje
     }
 
 
-def plot_intercept_trajectories(primary_traj, interceptor_traj, title="Missile Intercept Scenario"):
-    plt.figure(figsize=(10, 5))
+def plot_intercept_trajectories(
+    primary_traj,
+    interceptor_traj,
+    title="Missile Intercept Scenario",
+    show_plot=True,
+):
+    fig = plt.figure(figsize=(10, 5))
     plt.plot(primary_traj[:, 0], primary_traj[:, 1], label="Primary missile")
     plt.plot(interceptor_traj[:, 0], interceptor_traj[:, 1], label="Interceptor missile")
     plt.xlabel("X (m)")
@@ -204,7 +217,7 @@ def plot_intercept_trajectories(primary_traj, interceptor_traj, title="Missile I
     plt.title(title)
     plt.legend()
     plt.grid(True)
-    plt.show()
+    show_or_close(fig, show_plot)
 
 
 def animate_trajectory(
@@ -322,10 +335,7 @@ def animate_trajectory(
     if save_gif_path:
         anim.save(save_gif_path, writer="pillow", fps=fps)
 
-    if show_plot:
-        plt.show()
-    else:
-        plt.close(fig)
+    show_or_close(fig, show_plot)
 
     return anim
 
@@ -339,6 +349,7 @@ def plot_trajectory_3d(
     title="Phase 7 - 3D Trajectory",
     elev=25,
     azim=-60,
+    show_plot=True,
 ):
     fig = plt.figure(figsize=(10, 7))
     ax = fig.add_subplot(111, projection="3d")
@@ -379,7 +390,7 @@ def plot_trajectory_3d(
     ax.view_init(elev=elev, azim=azim)
     ax.legend()
     plt.tight_layout()
-    plt.show()
+    show_or_close(fig, show_plot)
 
 
 def plot_salvo_dispersion_3d(
@@ -389,6 +400,7 @@ def plot_salvo_dispersion_3d(
     azimuth_values,
     max_step=0.05,
     apply_earth_curvature=False,
+    show_plot=True,
 ):
     fig = plt.figure(figsize=(10, 7))
     ax = fig.add_subplot(111, projection="3d")
@@ -416,4 +428,4 @@ def plot_salvo_dispersion_3d(
     ax.view_init(elev=22, azim=-65)
     ax.legend()
     plt.tight_layout()
-    plt.show()
+    show_or_close(fig, show_plot)

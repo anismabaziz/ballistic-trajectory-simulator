@@ -1,6 +1,11 @@
 # Ballistic Trajectory Simulator
 
+![Tests](https://github.com/anismabaziz/ballistic-trajectory-simulator/actions/workflows/ci.yml/badge.svg)
+
 ## Setup
+
+Needs Python 3.11 or newer, which is what the pinned numpy and scipy releases
+require.
 
 Create Project Virtual Environment
 

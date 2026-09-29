@@ -1,0 +1,47 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+# A new push makes the previous run on the same branch irrelevant.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pytest (python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # The declared floors for numpy and scipy both need 3.11, which is why
+        # there is no 3.10 leg here. Add a version to the classifier list in
+        # pyproject.toml in the same commit.
+        python-version: ["3.11", "3.12"]
+
+    env:
+      # Nothing in the suite opens a window, but pygame is imported with the
+      # simulation package and warns on a runner with no display.
+      SDL_VIDEODRIVER: dummy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements.txt
+
+      - name: Install the project and its test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+
+      - name: Run the suite
+        run: pytest -q

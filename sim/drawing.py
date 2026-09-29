@@ -14,16 +14,16 @@ def draw_hud(sim, screen, pygame):
     # subtle border glow
     pygame.draw.rect(screen, (92, 132, 172), (panel_x, panel_y, panel_w, panel_h), width=1, border_radius=8)
 
-    active = sum(1 for m in sim.missiles if m.alive)
-    hits = sum(1 for m in sim.missiles if m.hit)
-    closest = min((m.closest_distance for m in sim.missiles), default=float("inf"))
+    active = sum(1 for m in sim.projectiles if m.alive)
+    hits = sum(1 for m in sim.projectiles if m.hit)
+    closest = min((m.closest_distance for m in sim.projectiles), default=float("inf"))
     closest_text = "N/A" if math.isinf(closest) else f"{closest:.2f} m"
 
     info_lines = [
         f"Launch {sim.launch_speed:.1f} m/s | Elev {sim.launch_elevation_deg:.1f} deg | Azi {sim.launch_azimuth_deg:.1f} deg",
         f"Target x0 {sim.target_x:.0f} m | vx {sim.target_velocity_x:.1f} m/s | r {sim.target_radius:.1f} m",
         f"Target {'moving' if abs(sim.target_velocity_x) > 1e-9 else 'stationary'} | state {'HIT' if sim.target_hit_timer > 0.0 else 'ACTIVE'}",
-        f"Missiles total {len(sim.missiles)} | active {active} | hits {hits}",
+        f"Projectiles total {len(sim.projectiles)} | active {active} | hits {hits}",
         f"Closest approach {closest_text} | Sim time {sim.sim_time:.2f} s",
     ]
 

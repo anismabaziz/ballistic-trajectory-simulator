@@ -23,8 +23,8 @@ jobs:
         python-version: ["3.11", "3.12"]
 
     env:
-      # Nothing in the suite opens a window, but pygame is imported with the
-      # simulation package and warns on a runner with no display.
+      # The renderer test needs a video driver and the runner has no screen. The
+      # dummy driver gives it a surface to draw into and no window to open.
       SDL_VIDEODRIVER: dummy
 
     steps:

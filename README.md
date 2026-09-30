@@ -24,68 +24,71 @@ Run the test suite:
 uv run pytest
 ```
 
-Run the simulator. `--headless` skips the plotting window and works on a
-machine with no display; drop it to watch the plots.
+Solve a launch angle against a target and report it. `--headless` closes the
+figure instead of showing it, so the command runs on a machine with no display.
 
 ```bash
-uv run python main.py --mode target-intercept --headless
+uv run python main.py solve --headless
 ```
 
-## Modes
+Run the real-time renderer:
 
-- `target-intercept`: runs stationary target, moving target, and interceptor scenarios
-- `real-time-animation`: runs 2D animation with optional target and GIF export
-- `three-d-simulation`: runs 3D simulation with optional target, curvature, and salvo
-- `interactive-simulator`: runs an interactive close-to-life pygame window
+```bash
+uv run python main.py render
+```
+
+## Commands
+
+- `solve`: searches for a launch angle that reaches the target and prints the
+  angle, whether the shot hit, and the miss distance
+- `render`: runs the interactive pygame window
+
+The salvo dispersion and the interceptor scenario are figures, not commands. The
+plotting functions for both live in `utils.py` and neither is on the command
+line.
 
 ## Headless
 
-`--headless` works in every mode except `interactive-simulator`, which opens a
-pygame window and needs a display to run at all. Passing the flag with
-`interactive-simulator` is an error. Passing the flag selects the
-non-interactive matplotlib backend and skips the plotting window, so the mode
-still computes and prints its results. The GIF export path takes the flag too,
-since it renders frames without opening a window.
+`--headless` belongs to `solve`, which reports the same thing with or without a
+window. It selects the non-interactive matplotlib backend, so the command still
+computes and prints its results and still writes a GIF export.
+
+`render` has no such flag. A window is the whole point of it, so passing
+`--headless` to `render` is an error.
 
 ## Examples
 
-Target interception flow example command:
+Solve against a stationary target:
 
 ```bash
-uv run python main.py --mode target-intercept --launch-speed 300 --headless
+uv run python main.py solve --launch-speed 300 --target-x 3500 --headless
 ```
 
-Real-time animation with moving target example command:
+Solve against a target walking towards the launcher:
 
 ```bash
-uv run python main.py --mode real-time-animation --launch-speed 300 --launch-elevation-deg 35 --target-x 2800 --target-velocity-x 40 --target-radius 20
+uv run python main.py solve --target-x 2000 --target-velocity-x 40 --headless
 ```
 
-Save animation GIF (headless) example command:
+Solve with Earth curvature in the model:
 
 ```bash
-uv run python main.py --mode real-time-animation --output-gif-path trajectory.gif --output-gif-fps 30 --headless
+uv run python main.py solve --enable-earth-curvature --headless
 ```
 
-3D single trajectory example command:
+Export the flight as an animation:
 
 ```bash
-uv run python main.py --mode three-d-simulation --launch-speed 300 --launch-elevation-deg 35 --launch-azimuth-deg 10
+uv run python main.py solve --output-gif-path trajectory.gif --output-gif-fps 30 --headless
 ```
 
-3D salvo example command:
+Run the renderer against a moving target:
 
 ```bash
-uv run python main.py --mode three-d-simulation --launch-speed 300 --launch-elevation-deg 35 --enable-salvo --salvo-missile-count 11 --salvo-azimuth-span-deg 40
+uv run python main.py render --launch-speed 300 --launch-elevation-deg 35 --launch-azimuth-deg 5 --target-x 2800 --target-velocity-x 40 --target-radius 20
 ```
 
-Interactive simulator example command:
-
-```bash
-uv run python main.py --mode interactive-simulator --launch-speed 300 --launch-elevation-deg 35 --launch-azimuth-deg 5 --target-x 2800 --target-velocity-x 40 --target-radius 20
-```
-
-Interactive controls:
+Renderer controls:
 
 - `SPACE`: launch missile
 - `R`: reset simulation
@@ -110,19 +113,23 @@ solution that is the best it found is never read as the best available.
 
 ## Arguments
 
-- `--mode`: run mode (`target-intercept`, `real-time-animation`, `three-d-simulation`)
+`solve` takes:
+
 - `--launch-speed`: launch speed in m/s
-- `--launch-elevation-deg`: launch elevation angle in degrees
-- `--launch-azimuth-deg`: launch azimuth angle in degrees (3D mode)
 - `--target-x`: initial target X position in meters
 - `--target-radius`: target radius in meters
 - `--target-velocity-x`: target velocity along X in m/s
-- `--frame-interval-ms`: animation frame interval in milliseconds
-- `--output-gif-path`: GIF output path for animation
+- `--enable-earth-curvature`: correct for Earth curvature in the model the angle
+  is solved against
+- `--output-gif-path`: write the flight out as an animated GIF
 - `--output-gif-fps`: GIF frame rate
-- `--headless`: do not open a plotting window, honored by every mode except
-  `interactive-simulator` (which rejects the flag)
-- `--enable-earth-curvature`: apply Earth curvature correction (3D mode)
-- `--enable-salvo`: enable multi-missile azimuth spread (3D mode)
-- `--salvo-missile-count`: number of missiles in salvo
-- `--salvo-azimuth-span-deg`: total azimuth span across salvo in degrees
+- `--headless`: do not open a plotting window
+
+`render` takes:
+
+- `--launch-speed`: launch speed in m/s
+- `--launch-elevation-deg`: launch elevation angle in degrees
+- `--launch-azimuth-deg`: launch azimuth angle in degrees
+- `--target-x`: initial target X position in meters
+- `--target-radius`: target radius in meters
+- `--target-velocity-x`: target velocity along X in m/s

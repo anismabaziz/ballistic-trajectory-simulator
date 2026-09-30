@@ -8,71 +8,8 @@ def show_or_close(fig, show_plot):
         plt.show()
     else:
         plt.close(fig)
-def plot_trajectory(
-    xs,
-    ys,
-    target,
-    hit=False,
-    hit_idx=None,
-    miss_index=None,
-    target_positions=None,
-    miss_distance=None,
-    title="Missile Trajectory",
-    show_plot=True,
-):
-    fig = plt.figure(figsize=(10, 5))
-    plt.plot(xs, ys, label="Missile Path")
 
-    if target_positions is None:
-        target_positions = np.column_stack((
-            np.full_like(xs, target.x, dtype=float),
-            np.full_like(ys, target.y, dtype=float),
-            np.zeros_like(xs, dtype=float),
-        ))
 
-    tx = target_positions[:, 0]
-    ty = target_positions[:, 1]
-    plt.plot(tx, ty, linestyle="--", color="gray", label="Target Path")
-
-    if miss_index is not None:
-        plt.scatter(
-            xs[miss_index],
-            ys[miss_index],
-            color="orange",
-            s=60,
-            label="Nearest pass",
-            zorder=5,
-        )
-
-    if hit:
-        hit_index = hit_idx if hit_idx is not None else int(np.argmin(np.abs(xs - tx)))
-        plt.scatter(xs[hit_index], ys[hit_index], color='green', s=100, label='Hit')
-        circle = mpatches.Circle(
-            (float(tx[hit_index]), float(ty[hit_index])),
-            target.radius,
-            color='green',
-            fill=False,
-        )
-        plt.gca().add_patch(circle)
-    else:
-        miss_idx = miss_index if miss_index is not None else -1
-        plt.scatter(tx[miss_idx], ty[miss_idx], color='red', marker='x', s=100, label='Miss')
-
-    if miss_distance is not None:
-        plt.text(
-            0.02,
-            0.98,
-            f"Miss distance: {miss_distance:.2f} m",
-            transform=plt.gca().transAxes,
-            verticalalignment="top",
-        )
-
-    plt.xlabel("X (m)")
-    plt.ylabel("Y (m)")
-    plt.title(title)
-    plt.legend()
-    plt.grid(True)
-    show_or_close(fig, show_plot)
 def plot_intercept_trajectories(
     primary_traj,
     interceptor_traj,

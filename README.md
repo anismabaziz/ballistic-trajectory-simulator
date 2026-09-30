@@ -41,7 +41,8 @@ uv run python main.py --mode target-intercept --headless
 ## Headless
 
 `--headless` works in every mode except `interactive-simulator`, which opens a
-pygame window and needs a display to run at all. Passing the flag selects the
+pygame window and needs a display to run at all. Passing the flag with
+`interactive-simulator` is an error. Passing the flag selects the
 non-interactive matplotlib backend and skips the plotting window, so the mode
 still computes and prints its results. The GIF export path takes the flag too,
 since it renders frames without opening a window.
@@ -111,7 +112,7 @@ Interactive controls:
 - `--output-gif-path`: GIF output path for animation
 - `--output-gif-fps`: GIF frame rate
 - `--headless`: do not open a plotting window, honored by every mode except
-  `interactive-simulator`
+  `interactive-simulator` (which rejects the flag)
 - `--enable-earth-curvature`: apply Earth curvature correction (3D mode)
 - `--enable-salvo`: enable multi-missile azimuth spread (3D mode)
 - `--salvo-missile-count`: number of missiles in salvo

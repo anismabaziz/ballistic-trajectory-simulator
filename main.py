@@ -1,5 +1,14 @@
 import argparse
+import sys
+
 import matplotlib
+
+# Select the non-interactive backend before pyplot is imported through
+# utils, otherwise matplotlib.use() inside main() runs too late to take
+# effect reliably.
+if "--headless" in sys.argv:
+    matplotlib.use("Agg")
+
 import numpy as np
 from physics import BallisticPhysics
 from sim.simulation import PygameBallisticSimulation
@@ -255,8 +264,11 @@ def run_three_d_simulation(
 
 
 def main():
-    args = build_cli_parser().parse_args()
-    if args.headless:
+    parser = build_cli_parser()
+    args = parser.parse_args()
+    if args.mode == "interactive-simulator" and args.headless:
+        parser.error("--headless is not supported in interactive-simulator mode: it needs a display")
+    if args.headless and matplotlib.get_backend().lower() != "agg":
         matplotlib.use("Agg")
     show_plot = not args.headless
     simulator = BallisticPhysics()

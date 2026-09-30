@@ -83,3 +83,9 @@ def test_gif_export_writes_the_animation_headless(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     assert gif_path.stat().st_size > 0
+
+
+def test_interactive_mode_rejects_headless():
+    result = run_cli("--mode", "interactive-simulator", "--headless")
+    assert result.returncode != 0
+    assert "interactive-simulator" in result.stderr

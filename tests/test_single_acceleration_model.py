@@ -16,8 +16,8 @@ from pathlib import Path
 import pytest
 
 from ballistics.physics import BallisticPhysics
+from ballistics.targets import Target, check_collision
 from sim.autosolve import DEFAULT_CANDIDATE_BUDGET, solve_launch
-from targets import Target, check_collision
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 

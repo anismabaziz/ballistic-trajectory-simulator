@@ -11,16 +11,14 @@ if "--headless" in sys.argv:
 
 import numpy as np
 from ballistics.physics import BallisticPhysics
+from ballistics.searches import find_launch_angle, solve_interceptor_angle, solve_moving_target_angle
+from ballistics.targets import Target, check_collision
 from sim.simulation import PygameBallisticSimulation
-from targets import Target, check_collision
 from utils import (
     animate_trajectory,
     plot_trajectory,
     plot_trajectory_3d,
     plot_salvo_dispersion_3d,
-    find_launch_angle,
-    solve_moving_target_angle,
-    solve_interceptor_angle,
     plot_intercept_trajectories,
 )
 

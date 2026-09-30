@@ -120,3 +120,28 @@ keeping `config.py` at the root. The first costs a two-root `package_dir` and a
 second root for the packaging test to resolve. The second leaves the physics
 reading its defaults from a module that is not part of the package it lives in.
 
+## Amendment: the searches take the physics model they search over
+
+The target interface and the three launch solution searches join the package,
+leaving the loose utilities module holding plotting and nothing else. One
+signature changes on the way: each search used to default to a physics instance
+built when its module was imported, and that default is gone, so `trajectory_func`
+is a required argument. Every call site already passed it, so nothing depends on
+the fallback.
+
+The reason is that the module-level instance was a second model. The entry point
+builds its own, the renderer is given one, and the searches quietly used a third,
+built from the defaults with no way for the caller to see which one produced an
+answer. Moving the code into the package is the moment that stops being a
+tidiness issue and starts being a correctness one: the package is what a consumer
+imports, and a library that hands out a model its caller never asked for is
+misleading from the outside. Requiring the model means the search is solved
+against the trajectory function its caller passed, and the wind table and the
+launch snapshot behind it are the caller's, which is what the launch solution
+search needs to be reproducible.
+
+**Considered options:** keeping the default as a module-level instance, and
+building a fresh default inside each search when the argument is absent. The
+first is the confusion being kept. The second still hides the model, and it
+pays for a fresh default wind table on every call.
+

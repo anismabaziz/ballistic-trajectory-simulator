@@ -1,4 +1,5 @@
 import ast
+import inspect
 import json
 import os
 import subprocess
@@ -147,30 +148,32 @@ def test_the_ballistics_library_imports_from_an_unrelated_directory(tmp_path):
     result = run_in_unrelated_directory(
         """
         from ballistics.physics import BallisticPhysics
-        from targets import Target, check_collision
-        from utils import find_launch_angle, solve_interceptor_angle, solve_moving_target_angle
+        from ballistics.searches import find_launch_angle, solve_interceptor_angle, solve_moving_target_angle
+        from ballistics.targets import Target, check_collision
 
         print(BallisticPhysics.__module__, Target.__module__, find_launch_angle.__module__)
         """,
         tmp_path,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.split() == ["ballistics.physics", "targets", "utils"]
+    assert result.stdout.split() == ["ballistics.physics", "ballistics.targets", "ballistics.searches"]
 
 
-def test_the_physics_and_target_interfaces_import_without_the_plotting_or_renderer_code(tmp_path):
-    """Covers physics and targets only, and the docstring says why.
+def test_the_library_imports_without_the_plotting_or_renderer_code(tmp_path):
+    """The physics, the target interface and the three searches, none of which plot.
 
-    The three searches are not in this test because they share `utils` with the
-    four matplotlib plotting functions, so importing a search still costs a
-    matplotlib import. Separating them widens this to the searches.
+    A consumer solving for a launch solution has no reason to pay for a
+    matplotlib import, so the searches took the same path into the package as
+    the physics did. Plotting is what stayed behind in the loose module, and
+    this is the test that holds that line.
     """
     result = run_in_unrelated_directory(
         f"""
         import sys
 
         from ballistics.physics import BallisticPhysics
-        from targets import Target, check_collision
+        from ballistics.searches import find_launch_angle, solve_interceptor_angle, solve_moving_target_angle
+        from ballistics.targets import Target, check_collision
 
         unwanted = {PLOTTING_AND_RENDERER!r}
         print(",".join(sorted(name for name in unwanted if name in sys.modules)))
@@ -181,19 +184,54 @@ def test_the_physics_and_target_interfaces_import_without_the_plotting_or_render
     assert result.stdout.strip() == ""
 
 
-def test_the_physics_and_its_constants_live_inside_the_ballistics_package():
-    """The physics and the constants it defaults from are package modules, not loose files.
+def test_the_ballistics_code_lives_inside_the_ballistics_package():
+    """The physics, the targets, the searches and the constants are package modules.
 
     The install tests run from an unrelated directory, which is the install's
     view and cannot see a stray copy left at the repository root. Asserting on
-    the tree is what catches that: a leftover `physics.py` would keep answering
-    `import physics` for anyone running from a checkout, and two copies of one
+    the tree is what catches that: a leftover `targets.py` would keep answering
+    `import targets` for anyone running from a checkout, and two copies of one
     implementation is the thing this layout is supposed to rule out.
     """
-    assert (PROJECT_ROOT / "ballistics" / "physics.py").exists()
-    assert (PROJECT_ROOT / "ballistics" / "config.py").exists()
-    assert not (PROJECT_ROOT / "physics.py").exists()
-    assert not (PROJECT_ROOT / "config.py").exists()
+    for module in ("physics", "config", "targets", "searches"):
+        assert (PROJECT_ROOT / "ballistics" / f"{module}.py").exists(), module
+        assert not (PROJECT_ROOT / f"{module}.py").exists(), module
+
+
+def test_importing_the_searches_does_not_build_a_physics_instance(tmp_path):
+    """Importing the searches must not hand out a second default physics model.
+
+    The searches used to default to a physics instance built when the module
+    was imported, which left the caller with one model and the module with
+    another, configured differently and impossible to see from the call site.
+    Every call passes the model it wants solved against instead.
+    """
+    result = run_in_unrelated_directory(
+        """
+        from ballistics.physics import BallisticPhysics
+        from ballistics import searches
+
+        print([name for name, value in vars(searches).items() if isinstance(value, BallisticPhysics)])
+        """,
+        tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "[]"
+
+
+def test_the_searches_have_to_be_handed_the_physics_model_they_search_over():
+    """A search takes the trajectory function it searches over as a required argument.
+
+    The searches used to default to a physics instance built when their module
+    was imported. That left the caller with one model and the module with
+    another, configured differently and invisible from the call site, so the
+    parameter is now required. The signature is what holds that line.
+    """
+    from ballistics import searches
+
+    for search in ("find_launch_angle", "solve_moving_target_angle", "solve_interceptor_angle"):
+        trajectory_func = inspect.signature(getattr(searches, search)).parameters["trajectory_func"]
+        assert trajectory_func.default is inspect.Parameter.empty, search
 
 
 def test_every_third_party_import_is_shipped_by_a_declared_dependency():

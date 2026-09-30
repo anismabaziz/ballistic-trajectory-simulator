@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 from ballistics.physics import BallisticPhysics
-from targets import Target, check_collision, closest_approach_between_trajectories
+from ballistics.targets import Target, check_collision, closest_approach_between_trajectories
 
 GRAVITY = 9.81
 

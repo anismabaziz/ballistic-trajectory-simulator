@@ -23,8 +23,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.integrate import solve_ivp
 
-from ballistics import config
 from ballistics.physics import BallisticPhysics
+from figure_common import describe_atmosphere as describe_shared_atmosphere
+from figure_common import run
 
 # The launch and atmosphere the figure reports. These are the renderer's
 # defaults, so the number in the figure describes the sandbox as it ships.
@@ -128,15 +129,12 @@ def observed_order(steps, errors):
 def describe_atmosphere():
     return (
         f"v0 = {LAUNCH_SPEED:.0f} m/s   elevation = {LAUNCH_ELEVATION_DEG:.0f}°   "
-        f"azimuth = {LAUNCH_AZIMUTH_DEG:.0f}°   latitude = {LATITUDE_DEG:.0f}°\n"
-        f"m = {config.MASS:.0f} kg   Cd = {config.CD}   A = {config.AREA} m²   "
-        f"rho = {config.RHO} kg/m³   g = {config.G} m/s²\n"
-        f"wind x = {config.WIND_X} m/s at {config.ALT_LEVELS} m,   "
-        f"wind z = {config.WIND_Y} m/s"
+        f"azimuth = {LAUNCH_AZIMUTH_DEG:.0f}°\n"
+        + describe_shared_atmosphere([f"latitude = {LATITUDE_DEG:.0f} deg"])
     )
 
 
-def main():
+def main(output_path=OUTPUT_PATH):
     physics, initial_state = launch_state()
     reference, flight_time = integrate_to_ground(physics, initial_state, 1000.0)
 
@@ -267,7 +265,7 @@ def main():
     figure.text(0.5, 0.015, describe_atmosphere(), ha="center", fontsize=8.5, color="#333333")
     figure.tight_layout(rect=(0.0, 0.06, 1.0, 1.0))
 
-    figure.savefig(OUTPUT_PATH, dpi=150)
+    figure.savefig(output_path, dpi=150)
     plt.close(figure)
 
     print(f"flight time {flight_time:.4f} s, reference range {reference[0]:.2f} m")
@@ -281,8 +279,8 @@ def main():
         print(
             f"  dt={step:.6f}  euler={euler_error:.4f} m  rk4={rk4_error:.3e} m  rk45={capped_error:.3e} m"
         )
-    print(f"wrote {OUTPUT_PATH}")
+    print(f"wrote {output_path}")
 
 
 if __name__ == "__main__":
-    main()
+    run(main, OUTPUT_PATH, "Sweep the step size and draw how the two integrators disagree")

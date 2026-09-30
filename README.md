@@ -43,9 +43,45 @@ uv run python main.py render
   angle, whether the shot hit, and the miss distance
 - `render`: runs the interactive pygame window
 
-The salvo dispersion and the interceptor scenario are figures, not commands. The
-plotting functions for both live in `utils.py` and neither is on the command
-line.
+The salvo dispersion and the intercept are figures, not commands. Both run
+without a display, state the launch conditions they flew, and write into
+`figures/`.
+
+## Figures
+
+Every figure below is produced by a script, and one command redraws all of them:
+
+```bash
+uv run python scripts/make_figures.py
+```
+
+### The salvo
+
+Nine rounds at the same speed and elevation, spread across 30 degrees of
+azimuth. They fly the same profile and land 1833 m apart.
+
+![Salvo dispersion](figures/salvo_dispersion.png)
+
+### The intercept
+
+An interceptor launched five seconds after a primary that is already 1150 m
+downrange. The search names the angle, the flight is replayed at a tighter step,
+and the two pass within 1.6 m of each other.
+
+![Intercept](figures/intercept.png)
+
+### The two integrators
+
+The solver integrates with adaptive RK45 and the renderer steps with a fixed
+step. This is how far apart their answers land.
+
+![Integrator convergence](figures/integrator_convergence.png)
+
+The individual generators are `scripts/integrator_convergence.py`,
+`scripts/salvo_dispersion.py`, and `scripts/intercept.py`. Each takes an output
+path argument and prints the launch conditions it flew. Nothing in `figures/` is
+a screenshot nobody can reproduce: a committed figure with no generator behind it
+fails the suite.
 
 ## Headless
 

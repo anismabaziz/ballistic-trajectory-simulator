@@ -10,23 +10,6 @@ def show_or_close(fig, show_plot):
         plt.close(fig)
 
 
-def plot_intercept_trajectories(
-    primary_traj,
-    interceptor_traj,
-    title="Missile Intercept Scenario",
-    show_plot=True,
-):
-    fig = plt.figure(figsize=(10, 5))
-    plt.plot(primary_traj[:, 0], primary_traj[:, 1], label="Primary missile")
-    plt.plot(interceptor_traj[:, 0], interceptor_traj[:, 1], label="Interceptor missile")
-    plt.xlabel("X (m)")
-    plt.ylabel("Y (m)")
-    plt.title(title)
-    plt.legend()
-    plt.grid(True)
-    show_or_close(fig, show_plot)
-
-
 def animate_trajectory(
     xs,
     ys,
@@ -195,44 +178,6 @@ def plot_trajectory_3d(
     ax.set_zlabel("Y (altitude)")
     ax.set_title(title)
     ax.view_init(elev=elev, azim=azim)
-    ax.legend()
-    plt.tight_layout()
-    show_or_close(fig, show_plot)
-
-
-def plot_salvo_dispersion_3d(
-    simulator,
-    v0,
-    angle_deg,
-    azimuth_values,
-    max_step=0.05,
-    apply_earth_curvature=False,
-    show_plot=True,
-):
-    fig = plt.figure(figsize=(10, 7))
-    ax = fig.add_subplot(111, projection="3d")
-
-    impact_x = []
-    impact_z = []
-
-    for az in azimuth_values:
-        xs, ys, zs, _, _, _ = simulator.trajectory_3d(
-            v0,
-            angle_deg,
-            azimuth_deg=float(az),
-            max_step=max_step,
-            apply_earth_curvature=apply_earth_curvature,
-        )
-        ax.plot(xs, zs, ys, alpha=0.8)
-        impact_x.append(xs[-1])
-        impact_z.append(zs[-1])
-
-    ax.scatter(impact_x, impact_z, np.zeros_like(impact_x), color="red", s=30, label="Impact points")
-    ax.set_xlabel("X (range)")
-    ax.set_ylabel("Z (cross-range)")
-    ax.set_zlabel("Y (altitude)")
-    ax.set_title("Phase 7.6 - Multi-salvo dispersion")
-    ax.view_init(elev=22, azim=-65)
     ax.legend()
     plt.tight_layout()
     show_or_close(fig, show_plot)

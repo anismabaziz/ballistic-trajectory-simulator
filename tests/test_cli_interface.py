@@ -5,12 +5,11 @@ never claimed to be about. The spine is a solver with a demo attached, so the
 interface now says the same thing: `solve` reports a launch solution, `render`
 opens the real-time window.
 
-Two things are held here rather than left to the reader. Every command the
-README documents is fed to the parser, because a documented flag the parser does
-not accept is a broken instruction that only a reviewer running it would catch.
-And the capabilities the removed modes carried are either reachable from one of
-the two commands or still callable where they live, since dropping a scenario
-without saying where it went is how a project quietly loses a feature.
+Every command the README documents is fed to the parser, because a documented
+flag the parser does not accept is a broken instruction that only a reviewer
+running it would catch. The capabilities the removed modes carried are covered
+where they went: the salvo and the intercept are figure generators, and the
+figure tests are what holds them to still running.
 """
 
 import argparse
@@ -20,7 +19,6 @@ import sys
 from pathlib import Path
 
 import matplotlib
-import numpy as np
 
 matplotlib.use("Agg")
 
@@ -32,9 +30,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import pytest  # noqa: E402
 
-from ballistics.physics import BallisticPhysics  # noqa: E402
 from main import add_render_arguments, add_solve_arguments, build_cli_parser  # noqa: E402
-from utils import plot_intercept_trajectories, plot_salvo_dispersion_3d  # noqa: E402
 
 SOLVE_COMMAND = "solve"
 RENDER_COMMAND = "render"
@@ -237,37 +233,3 @@ def test_the_solve_command_exports_the_flight_as_an_animation(tmp_path):
         "is not really being exercised"
     )
 
-
-# The salvo dispersion and the intercept scenario were run modes, and a run mode
-# is a place a capability can quietly disappear from. They are figure generators
-# rather than entry points now, and this is what says they still run: both
-# functions are called against the real physics with no display attached, so
-# neither can rot behind an argument nobody passes any more.
-SALVO_PROJECTILE_COUNT = 5
-SALVO_AZIMUTH_SPAN_DEG = 20.0
-
-
-def test_the_salvo_dispersion_figure_still_renders_without_a_display():
-    physics = BallisticPhysics()
-    azimuths = np.linspace(-SALVO_AZIMUTH_SPAN_DEG / 2, SALVO_AZIMUTH_SPAN_DEG / 2, SALVO_PROJECTILE_COUNT)
-
-    plot_salvo_dispersion_3d(
-        physics,
-        300.0,
-        35.0,
-        azimuths,
-        apply_earth_curvature=True,
-        show_plot=False,
-    )
-
-
-def test_the_intercept_figure_still_renders_without_a_display():
-    physics = BallisticPhysics()
-    xs, ys, zs, *_ = physics.trajectory_3d(300.0, 35.0, return_time=True)
-    interceptor_xs, interceptor_ys, interceptor_zs, *_ = physics.trajectory_3d(320.0, 50.0, return_time=True)
-
-    plot_intercept_trajectories(
-        np.column_stack((xs, ys)),
-        np.column_stack((interceptor_xs, interceptor_ys)),
-        show_plot=False,
-    )

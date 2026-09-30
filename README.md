@@ -99,6 +99,15 @@ Interactive controls:
 - `W/A/S/D`: camera pan on ground plane
 - sliders on the right: wind profile, air density, drag coefficient, time scale
 
+## Auto Solve
+
+The real-time window's Auto Solve button searches for a launch speed, elevation,
+and azimuth that hits the target. The search is bounded by a budget in candidate
+flights rather than by a stopwatch, so it returns the same solution for the same
+input on any machine. The status line under the buttons says how many candidates
+it spent and whether that was the whole search or the budget it was given, so a
+solution that is the best it found is never read as the best available.
+
 ## Arguments
 
 - `--mode`: run mode (`target-intercept`, `real-time-animation`, `three-d-simulation`)

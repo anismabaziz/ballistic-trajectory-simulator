@@ -9,11 +9,9 @@ the physics module instead of trusting the search's own verdict.
 The air is the sheared, northern-hemisphere atmosphere the single-model test
 uses, passed explicitly for the reason given there: reading the defaults in
 config would be a test of air density and a wind table, and neither claim below
-holds in still air. The wall clock is generous throughout, so what the search
-answers depends on the problem and not on how fast the machine is.
+holds in still air. The search budget is generous throughout, so what the search
+answers depends on the problem and not on how far it was allowed to look.
 """
-
-import time
 
 import numpy as np
 import pytest
@@ -36,10 +34,19 @@ WIND_VERTICAL_VALS = [0, 0, 0, 0, 0]
 MIN_AUTO_ELEVATION_DEG = 5.0
 TARGET_RADIUS_M = 40.0
 
-# The search spends about 2.6 s here running its whole grid, so 600 s is not a
-# tuned number. It is set well clear of the runtime so the answer cannot depend
-# on the machine, which is what lets the hit assertions below mean anything.
-FULL_GRID_WALL_S = 600.0
+# The search runs a coarse sweep of 54 flight times by 7 azimuths and then
+# refines around the winner over 7 by 7 by 7, so 721 candidates is the most it
+# can ever spend. The budget below is set above that ceiling rather than tuned to
+# an observed count, which is what lets the hit assertions above mean anything:
+# they are claims about the whole grid, and only a budget the grid fits inside
+# makes them so.
+FULL_GRID_CANDIDATE_BUDGET = 1000
+
+# A budget below the grid's ceiling, so the search is cut short partway through
+# the coarse sweep and never reaches the refinement. 200 is a quarter of the
+# ceiling, which is enough to have found a plausible winner to refine around and
+# not enough to refine it.
+TRUNCATED_CANDIDATE_BUDGET = 200
 
 # At 20 km the target is out of reach of anything this gun can throw in this
 # air. The best shot the search finds lands near 14 km and about 6 km short, so
@@ -61,8 +68,8 @@ INTERCEPT_SLICE_S = 5.0
 INTERCEPT_MISS_CEILING_M = 25.0
 
 
-def launch_snapshot(target_x_launch, target_velocity_x):
-    """One search input in the air above, with the clock moved out of the way."""
+def launch_snapshot(target_x_launch, target_velocity_x, candidate_budget=FULL_GRID_CANDIDATE_BUDGET):
+    """One search input in the air above, with the candidate budget set wide open."""
     return {
         "target_x_launch": target_x_launch,
         "target_velocity_x": target_velocity_x,
@@ -78,7 +85,7 @@ def launch_snapshot(target_x_launch, target_velocity_x):
         "wind_z_vals": WIND_Z_VALS,
         "wind_vertical_vals": WIND_VERTICAL_VALS,
         "min_auto_elevation": MIN_AUTO_ELEVATION_DEG,
-        "max_wall_s": FULL_GRID_WALL_S,
+        "candidate_budget": candidate_budget,
     }
 
 
@@ -271,45 +278,113 @@ def test_the_interceptor_search_converges_on_a_primary_it_can_reach():
     assert result["shared_time"] > 1.0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="the wall-clock search budget lets the same input return a different launch "
-    "solution once the clock runs out sooner, as it does on a slower machine",
-)
-def test_the_search_returns_the_same_launch_solution_on_repeated_runs(monkeypatch):
-    """The same snapshot solved twice names the same speed, elevation, and azimuth.
+def test_the_search_returns_the_same_launch_solution_on_repeated_runs():
+    """One snapshot solved three times names the same speed, elevation, and azimuth.
 
-    The second run expires the search's budget halfway through instead of at
-    the first check. The call the clock is read on is counted rather than the
-    seconds it reports, so the cut lands at the same point in the grid on any
-    machine: expiring on the first check would only show the search giving up,
-    which is a different defect and a different fix.
+    Nothing about the search reads a clock, so a repeat is the same function call
+    on the same inputs and the only way this can fail is for something to reach
+    outside the snapshot. Repeated runs are cheap here because the budget counts
+    candidate flights rather than seconds, so the cost of a run is set by the
+    problem and not by how loaded the machine happens to be.
     """
     snapshot = launch_snapshot(800.0, 0.0)
-    real_clock = time.perf_counter
 
-    reads = {"count": 0}
+    answers = [solve_launch(snapshot) for _ in range(3)]
 
-    def counted_clock():
-        reads["count"] += 1
-        return real_clock()
+    for answer in answers:
+        assert answer["ok"]
+        assert answer["speed"] == pytest.approx(answers[0]["speed"])
+        assert answer["elevation"] == pytest.approx(answers[0]["elevation"])
+        assert answer["azimuth"] == pytest.approx(answers[0]["azimuth"])
+        assert answer["candidates_used"] == answers[0]["candidates_used"]
 
-    monkeypatch.setattr(time, "perf_counter", counted_clock)
+
+def test_the_search_reports_the_candidates_it_spent():
+    """A full-grid solve says what it spent and says the grid was not a compromise.
+
+    The count is the claim that the answer is the best of everything the search
+    looked at. Reporting a spent count without the exhaustion flag would leave a
+    caller to guess whether it got the whole grid or a prefix of it, and a caller
+    forced into that guess will get it wrong in the direction of flattering the
+    search.
+    """
+    solution = solve_launch(launch_snapshot(800.0, 0.0))
+
+    assert 0 < solution["candidates_used"] <= FULL_GRID_CANDIDATE_BUDGET
+    assert solution["candidate_budget"] == FULL_GRID_CANDIDATE_BUDGET
+    assert not solution["exhausted"]
+
+
+def test_the_search_spends_no_more_than_the_budget_it_was_given():
+    """A budget below the grid's ceiling stops the search and admits it.
+
+    Three things have to hold together here. The search stops on the budget
+    rather than running to the end of the grid, it reports that it stopped early
+    rather than presenting a truncated answer as the best it found, and it still
+    answers, because a user pressing Auto Solve is owed a launch either way.
+    """
+    solution = solve_launch(
+        launch_snapshot(800.0, 0.0, candidate_budget=TRUNCATED_CANDIDATE_BUDGET)
+    )
+
+    assert solution["ok"]
+    assert solution["candidates_used"] == TRUNCATED_CANDIDATE_BUDGET
+    assert solution["candidate_budget"] == TRUNCATED_CANDIDATE_BUDGET
+    assert solution["exhausted"]
+
+
+def test_a_truncated_search_answers_the_same_way_every_time():
+    """The point of counting candidates instead of seconds: a short budget is repeatable.
+
+    This is the case that could not be written before. A wall clock cut the grid
+    off at a point that moved with the machine, so two runs of the same input
+    with the same short budget returned two different launch solutions and there
+    was no way to state the budget other than in seconds. A budget counted in
+    candidate flights names the same prefix of the grid on every run and on every
+    machine, so the truncated answer is reproducible too, not just the full one.
+    """
+    snapshot = launch_snapshot(800.0, 0.0, candidate_budget=TRUNCATED_CANDIDATE_BUDGET)
+
     first = solve_launch(snapshot)
-    assert first["ok"]
-    expiry_read = 1 + reads["count"] // 2
-
-    started = real_clock()
-    reads["count"] = 0
-
-    def expiring_clock():
-        reads["count"] += 1
-        return started if reads["count"] < expiry_read else started + 10000.0
-
-    monkeypatch.setattr(time, "perf_counter", expiring_clock)
     second = solve_launch(snapshot)
 
-    assert second["ok"], "the search gave up under a short budget on an input it solves given time"
     assert second["speed"] == pytest.approx(first["speed"])
     assert second["elevation"] == pytest.approx(first["elevation"])
     assert second["azimuth"] == pytest.approx(first["azimuth"])
+
+
+def test_a_budget_past_the_grid_changes_nothing():
+    """Once the budget covers the whole grid, more of it buys nothing.
+
+    This is what makes the reported budget meaningful. A candidate budget the
+    caller has to tune like a timeout is a wall clock wearing a different hat,
+    and the whole claim is that there is a budget above which the answer stops
+    moving because the search has nothing left to look at. That threshold is why
+    `FULL_GRID_CANDIDATE_BUDGET` can be picked by arithmetic instead of measured.
+    """
+    full = solve_launch(launch_snapshot(800.0, 0.0))
+    oversized = solve_launch(launch_snapshot(800.0, 0.0, candidate_budget=2 * FULL_GRID_CANDIDATE_BUDGET))
+
+    assert oversized["exhausted"] is False
+    assert oversized["candidates_used"] == full["candidates_used"]
+    assert oversized["speed"] == pytest.approx(full["speed"])
+    assert oversized["elevation"] == pytest.approx(full["elevation"])
+    assert oversized["azimuth"] == pytest.approx(full["azimuth"])
+
+
+def test_a_budget_that_exactly_fits_the_grid_is_not_a_truncated_search():
+    """Hitting the budget on the last candidate is not the same as running out of it.
+
+    The budget is read off the full solve rather than written down, so this holds
+    whatever the grid costs. The distinction matters because it is the boundary
+    the flag has to get right: a search allowed exactly the candidates it wanted
+    did see the whole grid, and reporting it as truncated would tell the renderer
+    to caveat an answer that needs no caveat. The returned solution is identical
+    either way, which is why the assertion is on the flag and not the numbers.
+    """
+    exact_count = solve_launch(launch_snapshot(800.0, 0.0))["candidates_used"]
+
+    exact = solve_launch(launch_snapshot(800.0, 0.0, candidate_budget=exact_count))
+
+    assert exact["candidates_used"] == exact_count
+    assert exact["exhausted"] is False

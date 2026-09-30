@@ -86,3 +86,12 @@ the measurement and the reasoning.
 as follow-up work. That was the narrower reading of this boundary and it was
 rejected because it leaves the study's finding published and unacted on, which
 is the outcome this whole branch exists to avoid.
+
+## Amendment: the launch solution search loses its wall clock
+
+A second exception is admitted, recorded in
+`docs/adr/0004-budget-the-launch-search-in-candidate-flights.md`. `sim/autosolve.py`
+spent a fixed two seconds and returned whatever it had found when the clock ran
+out, which made the launch solution depend on the machine and left the search
+impossible to pin in a test. It is now bounded by a budget counted in candidate
+flights, and the answer reports what it spent.

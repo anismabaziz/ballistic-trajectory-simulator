@@ -1,9 +1,48 @@
 import math
-import time
 
 import numpy as np
 
 from physics import BallisticPhysics
+
+# The coarse sweep is 54 flight times by 7 azimuths and the refinement around the
+# winner is 7 by 7 by 7, so no solve can ever spend more than 721 candidates.
+# The default sits above that ceiling, which means a solve given the default ran
+# the whole grid and its answer is the best of everything it looked at.
+DEFAULT_CANDIDATE_BUDGET = 1000
+
+
+class _CandidateBudget:
+    """How many candidate flights the search is allowed to spend.
+
+    The budget is counted in candidate flights rather than seconds so the answer
+    depends on the problem and not on the machine. A wall clock made a busy
+    machine return a worse launch solution without saying so, and the flag that
+    recorded it was never read by anything.
+    """
+
+    def __init__(self, limit):
+        self.limit = max(1, int(limit))
+        self.used = 0
+        self.refused = False
+
+    @property
+    def exhausted(self):
+        """True once the search wanted a candidate and could not have one.
+
+        This is a refused claim, not a counter that reached the limit. The two
+        differ at the boundary: a budget that happens to equal the grid size lets
+        the search fly every candidate it wanted, so its answer really is the
+        best of the whole grid and must not be reported as a truncated one.
+        """
+        return self.refused
+
+    def claim(self):
+        """Claim one candidate flight, or report that there is no budget left."""
+        if self.used >= self.limit:
+            self.refused = True
+            return False
+        self.used += 1
+        return True
 
 
 def _linspace(start, stop, count):
@@ -53,8 +92,7 @@ def _simulate_candidate(physics, speed, elevation_deg, azimuth_deg, target_x_sta
 
 
 def solve_launch(snapshot):
-    start = time.perf_counter()
-    deadline = start + float(snapshot.get("max_wall_s", 2.0))
+    budget = _CandidateBudget(snapshot.get("candidate_budget", DEFAULT_CANDIDATE_BUDGET))
 
     # The wind table is copied rather than referenced. `BallisticPhysics` keeps
     # whatever arrays it is handed with `asarray`, which does not copy a float
@@ -104,7 +142,7 @@ def solve_launch(snapshot):
 
     t_max = min(50.0, max(18.0, abs(target_x_start) / 190.0 + 14.0))
     for t in _linspace(1.2, t_max, 54):
-        if time.perf_counter() >= deadline:
+        if budget.exhausted:
             break
         x_t = target_x_start + target_vx * t
         if x_t <= 20.0:
@@ -120,20 +158,26 @@ def solve_launch(snapshot):
             continue
 
         for az in (-16.0, -8.0, -4.0, 0.0, 4.0, 8.0, 16.0):
+            if not budget.claim():
+                break
             consider(speed, theta, az, *_simulate_candidate(physics, speed, theta, az, target_x_start, target_vx, target_radius, dt=0.015))
 
     if best is None:
-        return {"ok": False}
+        return {"ok": False, **_budget_reporting(budget)}
 
     refine_speeds = _linspace(max(70.0, best["speed"] - 100.0), min(2200.0, best["speed"] + 100.0), 7)
     refine_elev = _linspace(max(min_elev, best["elevation"] - 6.0), min(88.0, best["elevation"] + 6.0), 7)
     refine_az = _linspace(max(-35.0, best["azimuth"] - 6.0), min(35.0, best["azimuth"] + 6.0), 7)
 
     for s in refine_speeds:
-        if time.perf_counter() >= deadline:
+        if budget.exhausted:
             break
         for e in refine_elev:
+            if budget.exhausted:
+                break
             for a in refine_az:
+                if not budget.claim():
+                    break
                 consider(s, e, a, *_simulate_candidate(physics, s, e, a, target_x_start, target_vx, target_radius, dt=0.012))
 
     return {
@@ -143,5 +187,19 @@ def solve_launch(snapshot):
         "elevation": best["elevation"],
         "azimuth": best["azimuth"],
         "hit": best["hit"],
-        "timed_out": time.perf_counter() >= deadline,
+        **_budget_reporting(budget),
+    }
+
+
+def _budget_reporting(budget):
+    """The candidate budget every answer carries, hit or miss.
+
+    A caller cannot tell a best-of-the-grid answer from a prefix of one without
+    these, and a caller that cannot tell them apart will present both the same
+    way.
+    """
+    return {
+        "candidates_used": budget.used,
+        "candidate_budget": budget.limit,
+        "exhausted": budget.exhausted,
     }

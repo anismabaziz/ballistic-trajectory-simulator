@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from physics import BallisticPhysics
-from sim.autosolve import solve_launch
+from sim.autosolve import DEFAULT_CANDIDATE_BUDGET, solve_launch
 from targets import Target, check_collision
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -47,9 +47,10 @@ RECORDED_MISS_DISTANCE_M = 39.174967007593196
 def snapshot():
     """A sheared-wind, northern-latitude atmosphere with a stationary target.
 
-    The wall clock is generous so the search runs its whole grid and the answer
-    does not depend on how fast the machine is. Ticket 11 replaces it with an
-    iteration budget, at which point that stops mattering.
+    The candidate budget covers the whole grid, so the search spends what the
+    problem needs and the answer does not depend on how far it was allowed to
+    look. A budget below the grid's ceiling would truncate the search and change
+    the launch solution this file records.
     """
     return {
         "target_x_launch": 800.0,
@@ -66,7 +67,7 @@ def snapshot():
         "wind_z_vals": [0, 4, 8, 12, 16],
         "wind_vertical_vals": [0, 0, 0, 0, 0],
         "min_auto_elevation": 5.0,
-        "max_wall_s": 600.0,
+        "candidate_budget": DEFAULT_CANDIDATE_BUDGET,
     }
 
 

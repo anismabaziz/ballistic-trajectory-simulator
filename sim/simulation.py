@@ -2,10 +2,42 @@ import math
 import random
 import threading
 
-from .autosolve import solve_launch
+from .autosolve import DEFAULT_CANDIDATE_BUDGET, solve_launch
 from .camera import apply_follow, handle_keyboard, handle_mouse, is_over_controls
 from .drawing import draw_hud
 from .ui import draw_control_panel, refresh_control_layout
+
+
+def describe_auto_solution(result):
+    """The status line the renderer shows for a solved launch, and its colour.
+
+    The budget wording is the point of this function. A search that spent its
+    whole grid returns the best launch solution available, and a search that ran
+    out of budget returns the best it had looked at so far. Those are different
+    claims about the same numbers, and the window has to make them different
+    words or the search looks better than it is.
+    """
+    if not result.get("ok"):
+        return "Auto solve failed", (255, 140, 140)
+
+    speed = result["speed"]
+    elevation = result["elevation"]
+    azimuth = result["azimuth"]
+
+    if result["hit"]:
+        outcome = f"Auto launched hit: {speed:.1f}m/s, elev {elevation:.1f}, az {azimuth:.1f}"
+        color = (120, 240, 150)
+    else:
+        outcome = (
+            f"Auto launched best: {speed:.1f}m/s, elev {elevation:.1f}, "
+            f"az {azimuth:.1f}, miss {result['distance']:.1f}m"
+        )
+        color = (255, 210, 130)
+
+    used = result["candidates_used"]
+    if result["exhausted"]:
+        return f"{outcome} - budget reached, best of {used}/{result['candidate_budget']} candidates", color
+    return f"{outcome} - best of the search, {used} candidates", color
 
 
 class _Projectile:
@@ -112,6 +144,12 @@ class PygameBallisticSimulation:
         self.auto_solver_running = False
         self.auto_solver_result = None
         self.auto_solver_started_sim_time = None
+        # Auto Solve asks for the whole grid. The search runs on its own thread,
+        # so a full sweep only costs the button's wait, and the wait buys an
+        # answer that is the best of everything the search looked at rather than
+        # a prefix of it. Lowering this makes the solve quicker and the answer
+        # worse, and the status line will say so.
+        self.auto_solve_candidate_budget = DEFAULT_CANDIDATE_BUDGET
 
         self.target_hit_timer = 0.0
 
@@ -201,35 +239,20 @@ class PygameBallisticSimulation:
             "wind_z_vals": self.simulator.wind_z_vals,
             "wind_vertical_vals": self.simulator.wind_vertical_vals,
             "min_auto_elevation": float(self.min_auto_solve_elevation_deg),
-            "max_wall_s": 2.0,
+            "candidate_budget": int(self.auto_solve_candidate_budget),
         }
         result = solve_launch(snapshot)
         self.auto_solver_result = result
         self.auto_solver_running = False
 
     def _apply_auto_solver_result(self, result):
-        if not result.get("ok"):
-            self.auto_status_text = "Auto solve failed"
-            self.auto_status_color = (255, 140, 140)
-            return
+        if result.get("ok"):
+            self.launch_speed = min(2200.0, result["speed"])
+            self.launch_elevation_deg = max(self.min_auto_solve_elevation_deg, result["elevation"])
+            self.launch_azimuth_deg = result["azimuth"]
+            self._launch_projectile()
 
-        best_speed = result["speed"]
-        best_angle = result["elevation"]
-        best_azimuth = result["azimuth"]
-        best_d = result["distance"]
-        best_hit = result["hit"]
-
-        self.launch_speed = min(2200.0, best_speed)
-        self.launch_elevation_deg = max(self.min_auto_solve_elevation_deg, best_angle)
-        self.launch_azimuth_deg = best_azimuth
-        self._launch_projectile()
-
-        if best_d <= self.target_radius:
-            self.auto_status_text = f"Auto launched hit: {best_speed:.1f}m/s, elev {best_angle:.1f}, az {best_azimuth:.1f}"
-            self.auto_status_color = (120, 240, 150)
-        else:
-            self.auto_status_text = f"Auto launched best: {best_speed:.1f}m/s, elev {best_angle:.1f}, az {best_azimuth:.1f}, miss {best_d:.1f}m"
-            self.auto_status_color = (255, 210, 130)
+        self.auto_status_text, self.auto_status_color = describe_auto_solution(result)
 
     def _update_auto_solver(self):
         if self.auto_solver_running:

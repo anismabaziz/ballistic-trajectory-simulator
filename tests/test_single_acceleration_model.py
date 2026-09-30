@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from physics import BallisticPhysics
+from ballistics.physics import BallisticPhysics
 from sim.autosolve import DEFAULT_CANDIDATE_BUDGET, solve_launch
 from targets import Target, check_collision
 

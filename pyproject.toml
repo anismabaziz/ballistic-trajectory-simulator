@@ -35,7 +35,7 @@ dependencies = [
 dev = ["packaging>=24.0", "pytest>=8.0"]
 
 [tool.setuptools]
-py-modules = ["config", "physics", "targets", "utils"]
+py-modules = ["targets", "utils"]
 
 [tool.setuptools.packages.find]
-include = ["sim*"]
+include = ["ballistics*", "sim*"]

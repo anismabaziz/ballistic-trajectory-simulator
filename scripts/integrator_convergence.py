@@ -23,8 +23,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.integrate import solve_ivp
 
-import config
-from physics import BallisticPhysics
+from ballistics import config
+from ballistics.physics import BallisticPhysics
 
 # The launch and atmosphere the figure reports. These are the renderer's
 # defaults, so the number in the figure describes the sandbox as it ships.

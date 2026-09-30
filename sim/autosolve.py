@@ -2,7 +2,7 @@ import math
 
 import numpy as np
 
-from physics import BallisticPhysics
+from ballistics.physics import BallisticPhysics
 
 # The coarse sweep is 54 flight times by 7 azimuths and the refinement around the
 # winner is 7 by 7 by 7, so no solve can ever spend more than 721 candidates.

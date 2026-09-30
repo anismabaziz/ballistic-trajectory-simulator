@@ -15,7 +15,7 @@ solver's answer, which is the gap the project reports rather than hides.
 
 import numpy as np
 
-from physics import BallisticPhysics
+from ballistics.physics import BallisticPhysics
 
 # The launch the study and the figure both use: the renderer's defaults.
 LAUNCH_SPEED = 300.0

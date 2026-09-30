@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 from typing import Literal, overload
-import config
+from . import config
 
 
 class BallisticPhysics:

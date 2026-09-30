@@ -95,3 +95,28 @@ spent a fixed two seconds and returned whatever it had found when the clock ran
 out, which made the launch solution depend on the machine and left the search
 impossible to pin in a test. It is now bounded by a budget counted in candidate
 flights, and the answer reports what it spent.
+
+## Amendment: the package sits at the repository root, not under `src/`
+
+The package is `ballistics/` beside `sim/`, not `src/ballistics/`. Physics and
+the constants it reads default from move into it; the renderer stays at the root
+where it already was.
+
+The reason is that the renderer is staying at the root either way, and a `src/`
+layout means shipping code from two roots. Setuptools describes that with a
+`package_dir` mapping instead of the single `packages.find` this project already
+uses, and the packaging test resolves those glob patterns against the repository
+root to work out what the install ships. One layout for the library and the demo
+app reads better than two layouts for one project, and it keeps the renderer's
+own moves out of scope.
+
+`config.py` moves with physics rather than staying behind as a loose root
+module. It holds physical constants and the default wind table, which is physics
+input, and the convergence script reads it only to label its figure. Leaving it
+behind would give the package a dependency on the repository root.
+
+**Considered options:** the `src/` layout as originally written here, and
+keeping `config.py` at the root. The first costs a two-root `package_dir` and a
+second root for the packaging test to resolve. The second leaves the physics
+reading its defaults from a module that is not part of the package it lives in.
+

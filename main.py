@@ -10,7 +10,7 @@ if "--headless" in sys.argv:
     matplotlib.use("Agg")
 
 import numpy as np
-from physics import BallisticPhysics
+from ballistics.physics import BallisticPhysics
 from sim.simulation import PygameBallisticSimulation
 from targets import Target, check_collision
 from utils import (

@@ -14,7 +14,7 @@ neither claim below holds in still air.
 import numpy as np
 import pytest
 
-from physics import BallisticPhysics
+from ballistics.physics import BallisticPhysics
 
 GRAVITY = 9.81
 LAUNCH_SPEED = 100.0
@@ -160,8 +160,8 @@ def test_zero_relative_airspeed_gives_no_drag():
     """A projectile flying with the air feels nothing but gravity.
 
     The relative airspeed is what drag is built from, so it reaching zero is the
-    one case where the drag term drops out entirely. This guards the branch at
-    `physics.py:55`.
+    one case where the drag term drops out entirely. This guards the zero
+    relative airspeed branch in `ballistics/physics.py`.
 
     The wind table is sheared, 8 m/s at the ground to 16 m/s at 3 km, and the
     velocity checked against it is the wind at that altitude rather than one

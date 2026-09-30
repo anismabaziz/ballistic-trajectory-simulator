@@ -74,15 +74,35 @@ def project_modules():
     return set(setuptools_config["py-modules"]) | found
 
 
+def shipped_sources():
+    """Every shipped python file, as paths, whether it ships as a module or inside a package.
+
+    A name in `top_level.txt` can be a module (`utils.py`) or a package directory
+    (`ballistics/`), and reading only `name.py` would walk straight past everything
+    that moved into one.
+    """
+    for name in declared_modules() | set(PLOTTING_AND_RENDERER):
+        package = PROJECT_ROOT / name
+        if (package / "__init__.py").exists():
+            yield from sorted(package.rglob("*.py"))
+            continue
+        module = Path(f"{package}.py")
+        if not module.exists():
+            # The names in PLOTTING_AND_RENDERER are third-party packages, which
+            # have no file of ours behind them. A name we do declare that is
+            # missing is a packaging typo, and letting it through would narrow
+            # what the audit below reads rather than fail anything.
+            assert name not in declared_modules(), f"{name} is declared as shipped but is not in the tree"
+            continue
+        yield module
+
+
 def third_party_imports():
     """Top-level modules the shipped code imports that come from a wheel, not the stdlib."""
     own = declared_modules() | set(PLOTTING_AND_RENDERER)
     imported = set()
 
-    for name in own:
-        path = PROJECT_ROOT / f"{name}.py"
-        if not path.exists():
-            continue
+    for path in shipped_sources():
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.Import):
                 imported.update(alias.name.split(".")[0] for alias in node.names)
@@ -126,7 +146,7 @@ def test_the_install_ships_exactly_the_modules_the_packaging_config_declares():
 def test_the_ballistics_library_imports_from_an_unrelated_directory(tmp_path):
     result = run_in_unrelated_directory(
         """
-        from physics import BallisticPhysics
+        from ballistics.physics import BallisticPhysics
         from targets import Target, check_collision
         from utils import find_launch_angle, solve_interceptor_angle, solve_moving_target_angle
 
@@ -135,7 +155,7 @@ def test_the_ballistics_library_imports_from_an_unrelated_directory(tmp_path):
         tmp_path,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.split() == ["physics", "targets", "utils"]
+    assert result.stdout.split() == ["ballistics.physics", "targets", "utils"]
 
 
 def test_the_physics_and_target_interfaces_import_without_the_plotting_or_renderer_code(tmp_path):
@@ -143,14 +163,13 @@ def test_the_physics_and_target_interfaces_import_without_the_plotting_or_render
 
     The three searches are not in this test because they share `utils` with the
     four matplotlib plotting functions, so importing a search still costs a
-    matplotlib import. Separating them widens this to the searches, and moving
-    the ballistics code into a package widens it further.
+    matplotlib import. Separating them widens this to the searches.
     """
     result = run_in_unrelated_directory(
         f"""
         import sys
 
-        from physics import BallisticPhysics
+        from ballistics.physics import BallisticPhysics
         from targets import Target, check_collision
 
         unwanted = {PLOTTING_AND_RENDERER!r}
@@ -160,6 +179,21 @@ def test_the_physics_and_target_interfaces_import_without_the_plotting_or_render
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == ""
+
+
+def test_the_physics_and_its_constants_live_inside_the_ballistics_package():
+    """The physics and the constants it defaults from are package modules, not loose files.
+
+    The install tests run from an unrelated directory, which is the install's
+    view and cannot see a stray copy left at the repository root. Asserting on
+    the tree is what catches that: a leftover `physics.py` would keep answering
+    `import physics` for anyone running from a checkout, and two copies of one
+    implementation is the thing this layout is supposed to rule out.
+    """
+    assert (PROJECT_ROOT / "ballistics" / "physics.py").exists()
+    assert (PROJECT_ROOT / "ballistics" / "config.py").exists()
+    assert not (PROJECT_ROOT / "physics.py").exists()
+    assert not (PROJECT_ROOT / "config.py").exists()
 
 
 def test_every_third_party_import_is_shipped_by_a_declared_dependency():

@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.patches as mpatches
 from matplotlib.animation import FuncAnimation
 from scipy.optimize import brentq
-from physics import BallisticPhysics
+from ballistics.physics import BallisticPhysics
 from targets import check_collision, closest_approach_between_trajectories
 
 

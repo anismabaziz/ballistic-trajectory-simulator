@@ -16,7 +16,7 @@ answers depends on the problem and not on how far it was allowed to look.
 import numpy as np
 import pytest
 
-from physics import BallisticPhysics
+from ballistics.physics import BallisticPhysics
 from sim.autosolve import solve_launch
 from targets import Target, check_collision, closest_approach_between_trajectories
 from utils import solve_interceptor_angle

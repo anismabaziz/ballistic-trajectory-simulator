@@ -68,3 +68,21 @@ rest in the air at a step boundary.
 subtract it, and unifying the two into a shared private module neither integrator
 owns. The first is not measurable in practice. The second re-creates the same
 duplication one level down.
+
+## Amendment: the renderer's step rule becomes RK4
+
+A second exception is admitted, narrower than the first. The renderer's frame
+loop no longer steps with semi-implicit Euler inline; it calls
+`BallisticPhysics.integrate_fixed_step` with the RK4 rule. The acceleration model
+is unchanged, the step is still one per frame, and the work is a loop of five
+lines that moves rather than a rewrite.
+
+The reason is that this is the decision the divergence study returned, and a
+recorded decision that the code does not implement is a record of an intention
+rather than of a decision. `docs/adr/0003-render-with-fixed-step-rk4.md` carries
+the measurement and the reasoning.
+
+**Considered options:** leaving the renderer on Euler and recording the RK4 swap
+as follow-up work. That was the narrower reading of this boundary and it was
+rejected because it leaves the study's finding published and unacted on, which
+is the outcome this whole branch exists to avoid.

@@ -276,14 +276,20 @@ class PygameBallisticSimulation:
 
         for projectile in self.projectiles:
             if projectile.alive:
-                ax, ay, az = self.simulator.compute_acceleration(projectile.y, projectile.vx, projectile.vy, projectile.vz)
-                projectile.vx += ax * dt
-                projectile.vy += ay * dt
-                projectile.vz += az * dt
-
-                projectile.x += projectile.vx * dt
-                projectile.y += projectile.vy * dt
-                projectile.z += projectile.vz * dt
+                state = self.simulator.integrate_fixed_step(
+                    [projectile.x, projectile.y, projectile.z, projectile.vx, projectile.vy, projectile.vz],
+                    dt,
+                    dt,
+                    rule="rk4",
+                )
+                (
+                    projectile.x,
+                    projectile.y,
+                    projectile.z,
+                    projectile.vx,
+                    projectile.vy,
+                    projectile.vz,
+                ) = state
 
                 if projectile.y <= 0.0 and len(projectile.trail) > 3:
                     projectile.y = 0.0

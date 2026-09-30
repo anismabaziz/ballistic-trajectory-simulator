@@ -41,6 +41,51 @@ class BallisticPhysics:
         ax, ay, az = self.compute_acceleration(y, vx, vy, vz)
         return [vx, vy, vz, ax, ay, az]
 
+    def integrate_fixed_step(self, initial_state, step, duration, rule):
+        """Advance the state through the same acceleration model, fixed step.
+
+        The renderer steps this way so its frame pacing stays deterministic: it
+        knows before the frame starts how many steps it will take, and how long
+        each one costs. Two rules are available and the convergence study
+        measures both against the adaptive solver. `rk4` is the classical
+        four-stage rule and is what the renderer uses. `euler` is semi-implicit
+        Euler, the rule the renderer shipped with, kept because it is the
+        baseline the study compares against and it is first order.
+        """
+        if rule not in FIXED_STEP_RULES:
+            raise ValueError(f"unknown fixed-step rule: {rule!r}")
+        # Copy, because the Euler step updates the state in place and a caller
+        # handing us its own array should not find it changed underneath.
+        state = np.array(initial_state, dtype=float)
+        count = max(1, int(np.ceil(duration / step)))
+        # Trim the step so the run lands exactly on `duration`. Without this a
+        # sweep over step sizes compares runs that stopped at different times,
+        # and the error looks noisier than the rule is.
+        step = duration / count
+        for _ in range(count):
+            state = FIXED_STEP_RULES[rule](self, state, step)
+        return state
+
+    def _euler_step(self, state, step):
+        ax, ay, az = self.compute_acceleration(state[1], state[3], state[4], state[5])
+        state[3] += ax * step
+        state[4] += ay * step
+        state[5] += az * step
+        state[0] += state[3] * step
+        state[1] += state[4] * step
+        state[2] += state[5] * step
+        return state
+
+    def _rk4_step(self, state, step):
+        def derivative(point):
+            return np.asarray(self.projectile_rhs_3d(0.0, point), dtype=float)
+
+        k1 = derivative(state)
+        k2 = derivative(state + 0.5 * step * k1)
+        k3 = derivative(state + 0.5 * step * k2)
+        k4 = derivative(state + step * k3)
+        return state + (step / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+
     def compute_acceleration(self, altitude_y, vx, vy, vz):
         y = altitude_y
         wind_x = np.interp(y, self.alt_levels, self.wind_x_vals)
@@ -135,3 +180,6 @@ class BallisticPhysics:
             return xs, ys, zs, solution.t, R, T, H
         return xs, ys, zs, R, T, H
 
+
+
+FIXED_STEP_RULES = {"euler": BallisticPhysics._euler_step, "rk4": BallisticPhysics._rk4_step}

@@ -28,13 +28,13 @@ def run_stationary_target_scenario(simulator, v0=300.0, target_x=3500.0, target_
 
     theta_hit = find_launch_angle(v0, target.x, trajectory_func=simulator.trajectory_3d)
     xs, ys, zs, t_arr, _, _, _ = simulator.trajectory_3d(v0, theta_hit, return_time=True)
-    hit, hit_idx, closest_distance, closest_idx = check_collision(xs, ys, zs, target, t_array=t_arr)
+    hit, hit_idx, miss_distance, miss_index = check_collision(xs, ys, zs, target, t_array=t_arr)
 
     target_positions = target.positions_over_time(t_arr)
     print("=== Stationary target result ===")
     print(f"Launch angle: {theta_hit:.2f} degrees")
     print(f"Hit: {hit}")
-    print(f"Closest distance: {closest_distance:.2f} m")
+    print(f"Miss distance: {miss_distance:.2f} m")
 
     plot_trajectory(
         xs,
@@ -42,9 +42,9 @@ def run_stationary_target_scenario(simulator, v0=300.0, target_x=3500.0, target_
         target,
         hit=hit,
         hit_idx=hit_idx,
-        closest_idx=closest_idx,
+        miss_index=miss_index,
         target_positions=target_positions,
-        closest_distance=closest_distance,
+        miss_distance=miss_distance,
         title="Stationary target collision check",
         show_plot=show_plot,
     )
@@ -63,7 +63,7 @@ def run_moving_target_scenario(simulator, v0=300.0, target_x=3000.0, target_radi
     print("\n=== Moving target result ===")
     print(f"Solved launch angle: {result['angle']:.2f} degrees")
     print(f"Hit: {result['hit']}")
-    print(f"Closest distance: {result['closest_distance']:.2f} m")
+    print(f"Miss distance: {result['miss_distance']:.2f} m")
 
     plot_trajectory(
         xs,
@@ -71,9 +71,9 @@ def run_moving_target_scenario(simulator, v0=300.0, target_x=3000.0, target_radi
         moving_target,
         hit=result["hit"],
         hit_idx=result["hit_idx"],
-        closest_idx=result["closest_idx"],
+        miss_index=result["miss_index"],
         target_positions=target_positions,
-        closest_distance=result["closest_distance"],
+        miss_distance=result["miss_distance"],
         title="Moving target interception",
         show_plot=show_plot,
     )
@@ -103,8 +103,8 @@ def run_interceptor_scenario(
     # geometry needs a launch delay, which is not implemented.
     print("\n=== Interceptor result ===")
     print(f"Interceptor launch angle: {result['angle']:.2f} degrees")
-    print(f"Miss distance: {result['closest_distance']:.2f} m")
-    print(f"Time of closest approach: {result['shared_time']:.3f} s")
+    print(f"Miss distance: {result['miss_distance']:.2f} m")
+    print(f"Miss time: {result['shared_time']:.3f} s")
     print("Hit: not determined, both projectiles share a launch point")
 
     plot_intercept_trajectories(primary_positions, interceptor_traj, show_plot=show_plot)
@@ -126,12 +126,12 @@ def run_real_time_animation(
     target_positions = None
     hit = None
     hit_idx = None
-    closest_distance = None
+    miss_distance = None
 
     if target_x is not None:
         target = Target(x=target_x, radius=target_radius, vx=target_vx)
         target_positions = target.positions_over_time(t_arr)
-        hit, hit_idx, closest_distance, _ = check_collision(
+        hit, hit_idx, miss_distance, _ = check_collision(
             xs,
             ys,
             np.zeros_like(xs),
@@ -142,7 +142,7 @@ def run_real_time_animation(
         print("=== Animation target state ===")
         print(f"Target mode: {'moving' if target_vx != 0 else 'stationary'}")
         print(f"Hit: {hit}")
-        print(f"Closest distance: {closest_distance:.2f} m")
+        print(f"Miss distance: {miss_distance:.2f} m")
 
     animate_trajectory(
         xs,
@@ -155,7 +155,7 @@ def run_real_time_animation(
         target_radius=target_radius if target_positions is not None else None,
         hit=hit,
         hit_idx=hit_idx,
-        closest_distance=closest_distance,
+        miss_distance=miss_distance,
     )
 
 
@@ -244,11 +244,11 @@ def run_three_d_simulation(
     if target_x is not None:
         target = Target(x=target_x, radius=target_radius, vx=target_vx)
         target_positions = target.positions_over_time(t_arr)
-        hit, _, closest_distance, _ = check_collision(xs, ys, zs, target, t_array=t_arr)
+        hit, _, miss_distance, _ = check_collision(xs, ys, zs, target, t_array=t_arr)
         print("=== 3D target state ===")
         print(f"Target mode: {'moving' if target_vx != 0 else 'stationary'}")
         print(f"Hit: {hit}")
-        print(f"Closest distance: {closest_distance:.2f} m")
+        print(f"Miss distance: {miss_distance:.2f} m")
 
     plot_trajectory_3d(
         xs,

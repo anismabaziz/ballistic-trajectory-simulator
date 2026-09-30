@@ -18,7 +18,7 @@ import pytest
 
 from ballistics.physics import BallisticPhysics
 from ballistics.searches import solve_interceptor_angle
-from ballistics.targets import Target, check_collision, closest_approach_between_trajectories
+from ballistics.targets import Target, check_collision, miss_distance_between_trajectories
 from sim.autosolve import solve_launch
 
 GRAVITY = 9.81
@@ -160,7 +160,7 @@ def replay_intercept(physics, primary, primary_time, solution):
         max_step=0.01,
     )
     interceptor = np.column_stack((xs, ys, zs))
-    distance, _when, _index = closest_approach_between_trajectories(
+    distance, _when, _index = miss_distance_between_trajectories(
         primary, interceptor, primary_time, t_array
     )
     return distance
@@ -206,9 +206,9 @@ def test_the_search_hits_a_stationary_target_it_can_reach(stationary_snapshot, s
     """
     assert stationary_solution["ok"]
     assert stationary_solution["hit"]
-    assert stationary_solution["distance"] <= TARGET_RADIUS_M
+    assert stationary_solution["miss_distance"] <= TARGET_RADIUS_M
 
-    hit, _hit_index, miss_distance, _closest_index = fly_solution(
+    hit, _hit_index, miss_distance, _miss_index = fly_solution(
         stationary_snapshot, stationary_solution
     )
     assert hit, f"the search's answer misses by {miss_distance:.1f} m under the integrator"
@@ -225,9 +225,9 @@ def test_the_search_hits_a_moving_target_it_can_reach(moving_snapshot, moving_so
     """
     assert moving_solution["ok"]
     assert moving_solution["hit"]
-    assert moving_solution["distance"] <= TARGET_RADIUS_M
+    assert moving_solution["miss_distance"] <= TARGET_RADIUS_M
 
-    hit, _hit_index, miss_distance, _closest_index = fly_solution(moving_snapshot, moving_solution)
+    hit, _hit_index, miss_distance, _miss_index = fly_solution(moving_snapshot, moving_solution)
     assert hit, f"the search's answer misses by {miss_distance:.1f} m under the integrator"
 
 
@@ -244,9 +244,9 @@ def test_the_search_admits_a_miss_for_a_target_it_cannot_reach(
     """
     assert unreachable_solution["ok"]
     assert not unreachable_solution["hit"]
-    assert unreachable_solution["distance"] > LARGE_MISS_FLOOR_M
+    assert unreachable_solution["miss_distance"] > LARGE_MISS_FLOOR_M
 
-    hit, _hit_index, miss_distance, _closest_index = fly_solution(
+    hit, _hit_index, miss_distance, _miss_index = fly_solution(
         unreachable_snapshot, unreachable_solution
     )
     assert not hit

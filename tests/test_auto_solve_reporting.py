@@ -24,7 +24,7 @@ def solution(**overrides):
     """A solved launch the way the search reports one, with the budget filled in."""
     result = {
         "ok": True,
-        "distance": 12.0,
+        "miss_distance": 12.0,
         "speed": 236.2,
         "elevation": 6.5,
         "azimuth": 0.0,
@@ -54,7 +54,7 @@ def test_a_search_that_ran_out_of_budget_says_so():
     misleading, so this test fails on wording alone.
     """
     text, color = describe_auto_solution(
-        solution(hit=False, distance=420.0, candidates_used=260, candidate_budget=260, exhausted=True)
+        solution(hit=False, miss_distance=420.0, candidates_used=260, candidate_budget=260, exhausted=True)
     )
 
     assert "budget" in text
@@ -65,7 +65,7 @@ def test_a_search_that_ran_out_of_budget_says_so():
 def test_the_hit_and_miss_colours_still_say_which_it_was():
     """The budget wording does not swallow the hit verdict it sits next to."""
     _hit_text, hit_color = describe_auto_solution(solution())
-    _miss_text, miss_color = describe_auto_solution(solution(hit=False, distance=420.0))
+    _miss_text, miss_color = describe_auto_solution(solution(hit=False, miss_distance=420.0))
 
     assert hit_color != miss_color
 
@@ -78,7 +78,7 @@ def test_the_renderer_applies_the_status_the_search_earned():
     sets against the one the pure reporter produces, so dropping the budget from
     the applied status fails here even if the reporter still has it.
     """
-    result = solution(candidates_used=260, candidate_budget=260, exhausted=True, hit=False, distance=420.0)
+    result = solution(candidates_used=260, candidate_budget=260, exhausted=True, hit=False, miss_distance=420.0)
     expected, _color = describe_auto_solution(result)
 
     launched = []

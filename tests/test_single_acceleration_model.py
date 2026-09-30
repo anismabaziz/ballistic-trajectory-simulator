@@ -101,7 +101,7 @@ def test_the_search_returns_the_launch_solution_it_returned_before(solved_launch
 
 
 def test_the_search_reports_the_miss_distance_it_reported_before(solved_launch):
-    assert solved_launch["distance"] == pytest.approx(
+    assert solved_launch["miss_distance"] == pytest.approx(
         RECORDED_MISS_DISTANCE_M, abs=MISS_DISTANCE_TOLERANCE_M
     )
 
@@ -130,6 +130,6 @@ def test_the_launch_solution_hits_the_target_under_the_shared_integrator(solved_
     )
     target = Target(atmosphere["target_x_launch"], radius=atmosphere["target_radius"])
 
-    hit, _hit_index, miss_distance, _closest_index = check_collision(xs, ys, zs, target, t_array=t_array)
+    hit, _hit_index, miss_distance, _miss_index = check_collision(xs, ys, zs, target, t_array=t_array)
 
     assert hit, f"the search's own answer misses by {miss_distance:.1f} m under the shared integrator"

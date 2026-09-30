@@ -14,9 +14,9 @@ def plot_trajectory(
     target,
     hit=False,
     hit_idx=None,
-    closest_idx=None,
+    miss_index=None,
     target_positions=None,
-    closest_distance=None,
+    miss_distance=None,
     title="Missile Trajectory",
     show_plot=True,
 ):
@@ -34,13 +34,13 @@ def plot_trajectory(
     ty = target_positions[:, 1]
     plt.plot(tx, ty, linestyle="--", color="gray", label="Target Path")
 
-    if closest_idx is not None:
+    if miss_index is not None:
         plt.scatter(
-            xs[closest_idx],
-            ys[closest_idx],
+            xs[miss_index],
+            ys[miss_index],
             color="orange",
             s=60,
-            label="Closest approach",
+            label="Nearest pass",
             zorder=5,
         )
 
@@ -55,14 +55,14 @@ def plot_trajectory(
         )
         plt.gca().add_patch(circle)
     else:
-        miss_idx = closest_idx if closest_idx is not None else -1
+        miss_idx = miss_index if miss_index is not None else -1
         plt.scatter(tx[miss_idx], ty[miss_idx], color='red', marker='x', s=100, label='Miss')
 
-    if closest_distance is not None:
+    if miss_distance is not None:
         plt.text(
             0.02,
             0.98,
-            f"Closest distance: {closest_distance:.2f} m",
+            f"Miss distance: {miss_distance:.2f} m",
             transform=plt.gca().transAxes,
             verticalalignment="top",
         )
@@ -101,7 +101,7 @@ def animate_trajectory(
     target_radius=None,
     hit=None,
     hit_idx=None,
-    closest_distance=None,
+    miss_distance=None,
 ):
     """
     Animate a precomputed missile trajectory using matplotlib FuncAnimation.
@@ -140,8 +140,8 @@ def animate_trajectory(
         status_label = "HIT" if hit else "MISS"
         status_color = "green" if hit else "red"
         subtitle = f"{status_label}"
-        if closest_distance is not None:
-            subtitle += f" | Closest distance: {closest_distance:.2f} m"
+        if miss_distance is not None:
+            subtitle += f" | Miss distance: {miss_distance:.2f} m"
         status_text = ax.text(
             0.02,
             0.98,

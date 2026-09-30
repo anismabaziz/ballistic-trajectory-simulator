@@ -30,7 +30,7 @@ def describe_auto_solution(result):
     else:
         outcome = (
             f"Auto launched best: {speed:.1f}m/s, elev {elevation:.1f}, "
-            f"az {azimuth:.1f}, miss {result['distance']:.1f}m"
+            f"az {azimuth:.1f}, miss {result['miss_distance']:.1f}m"
         )
         color = (255, 210, 130)
 
@@ -51,7 +51,7 @@ class _Projectile:
         self.alive = True
         self.hit = False
         self.trail = [(self.x, self.y, self.z)]
-        self.closest_distance = float("inf")
+        self.miss_distance = float("inf")
 
 
 class _Slider:
@@ -322,7 +322,7 @@ class PygameBallisticSimulation:
             dy = projectile.y - ty
             dz = projectile.z - tz
             d = math.sqrt(dx * dx + dy * dy + dz * dz)
-            projectile.closest_distance = min(projectile.closest_distance, d)
+            projectile.miss_distance = min(projectile.miss_distance, d)
             if d <= self.target_radius and projectile.alive:
                 projectile.hit = True
                 projectile.alive = False

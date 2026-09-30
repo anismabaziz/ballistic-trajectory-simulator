@@ -1,12 +1,12 @@
 """What the miss distance metric actually means.
 
-`check_collision` and `closest_approach_between_trajectories` are the two
+`check_collision` and `miss_distance_between_trajectories` are the two
 functions every launch solution gets scored by, and a launch solution is only as
-trustworthy as its score. These tests pin the two claims the glossary in
-CONTEXT.md makes about them. A miss distance is a distance between a trajectory
-and a target at one shared instant, not a distance between two paths treated as
+trustworthy as its score. These tests pin the two claims the project glossary
+makes about them. A miss distance is a distance between a trajectory and a
+target at one shared instant, not a distance between two paths treated as
 geometry. And a hit is the first time the projectile is inside the target, not
-the closest it ever comes.
+the smallest separation it ever reaches.
 
 The shots are flown through the physics module rather than fabricated as point
 arrays, so each case is a trajectory the integrator actually produced. Every
@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 from ballistics.physics import BallisticPhysics
-from ballistics.targets import Target, check_collision, closest_approach_between_trajectories
+from ballistics.targets import Target, check_collision, miss_distance_between_trajectories
 
 GRAVITY = 9.81
 
@@ -39,13 +39,13 @@ STANDARD_FLIGHT_T = 200.0
 COINCIDENT_TOLERANCE_M = 1e-6
 
 # The target parked at its own launch point is 115 m from the trajectory at its
-# closest, which is the whole altitude the moving target climbs through in the
+# nearest, which is the whole altitude the moving target climbs through in the
 # seconds before the crossing. Asserted as a floor, well under the 255 m, to
 # catch a metric that quietly compared against the launch position.
 PARKED_MISS_FLOOR_M = 100.0
 
 # The 45 degree shot lands at v^2 sin(2*45)/g = 1019.37 m. Sitting 500 m past
-# that leaves the final sample as the closest the trajectory ever gets, so the
+# that leaves the final sample as the nearest the trajectory ever gets, so the
 # miss distance is the overshoot exactly.
 OVERSHOOT_M = 500.0
 
@@ -57,8 +57,8 @@ ASCENDING_CROSSING_S = (3.0, 3.3)
 DESCENDING_CROSSING_S = (16.4, 16.7)
 
 # Inside the 10 m radius the two passes miss by 7.2 m and 4.6 m respectively.
-# The descending pass is the closer one, so a metric that reported the closest
-# approach as the hit would name the wrong end of the flight.
+# The descending pass is the nearer one, so a metric that reported the
+# nearest pass as the hit would name the wrong end of the flight.
 ASCENDING_MISS_M = 7.2
 DESCENDING_MISS_M = 4.6
 CROSSING_TOLERANCE_M = 0.5
@@ -150,18 +150,18 @@ def test_a_moving_target_is_met_at_its_own_time_not_at_its_launch_point():
         launch_position[0], y=launch_position[1], z=launch_position[2], radius=0.05
     )
 
-    hit, hit_index, miss_distance, closest_index = check_collision(
+    hit, hit_index, miss_distance, miss_index = check_collision(
         xs, ys, zs, moving, t_array=t_array
     )
     inside = distances_to(xs, ys, zs, moving, t_array) <= moving.radius
-    _parked_hit, _parked_index, parked_miss, _parked_closest = check_collision(
+    _parked_hit, _parked_index, parked_miss, _parked_miss_index = check_collision(
         xs, ys, zs, parked, t_array=t_array
     )
 
     assert hit
     assert miss_distance == pytest.approx(0.0, abs=COINCIDENT_TOLERANCE_M)
     assert hit_index == apex_index
-    assert closest_index == apex_index
+    assert miss_index == apex_index
     assert inside.sum() == 1, "the coincidence is one instant long, not a stretch of trajectory"
     assert parked_miss > PARKED_MISS_FLOOR_M
 
@@ -170,7 +170,7 @@ def test_a_target_the_shot_cannot_reach_is_reported_as_a_miss():
     """A target beyond the shot's reach gets no hit, and a distance that says by how much.
 
     The target sits 500 m past where the 45 degree shot lands, on the ground, so
-    the trajectory's final sample is the closest it ever comes and the miss
+    the trajectory's final sample is the nearest it ever comes and the miss
     distance is the overshoot to the last decimal.
 
     The pair of assertions is the point. A distance with no verdict, or a verdict
@@ -180,7 +180,7 @@ def test_a_target_the_shot_cannot_reach_is_reported_as_a_miss():
     xs, ys, zs, t_array, ground_range, _flight_time, _peak = vacuum()
 
     beyond_reach = Target(ground_range + OVERSHOOT_M, radius=10.0)
-    hit, hit_index, miss_distance, _closest_index = check_collision(
+    hit, hit_index, miss_distance, _miss_index = check_collision(
         xs, ys, zs, beyond_reach, t_array=t_array
     )
 
@@ -189,7 +189,7 @@ def test_a_target_the_shot_cannot_reach_is_reported_as_a_miss():
     assert miss_distance == pytest.approx(OVERSHOOT_M, abs=1e-6)
 
 
-def test_hit_index_is_the_earliest_hit_not_the_closest_approach():
+def test_hit_index_is_the_earliest_hit_not_the_nearest_pass():
     """A target inside the radius twice is hit on the first pass, not the nearest one.
 
     A 75 degree shot crosses 255 m twice, going up at t = 3.1 s and coming down
@@ -198,7 +198,7 @@ def test_hit_index_is_the_earliest_hit_not_the_closest_approach():
     equally close: 7.2 m on the way up against 4.6 m on the way down.
 
     That ordering is the whole test. The renderer draws its hit marker at
-    `hit_index`, so a metric reporting the closest approach as the hit would
+    `hit_index`, so a metric reporting the nearest pass as the hit would
     still draw a hit here, thirteen seconds and two hundred metres downrange of
     where the target was actually reached.
 
@@ -214,7 +214,7 @@ def test_hit_index_is_the_earliest_hit_not_the_closest_approach():
     inside = np.flatnonzero(distances <= crossing_target.radius)
     windows = np.split(inside, np.flatnonzero(np.diff(inside) > 1) + 1)
 
-    hit, hit_index, _miss_distance, closest_index = check_collision(
+    hit, hit_index, _miss_distance, miss_index = check_collision(
         xs, ys, zs, crossing_target, t_array=t_array
     )
 
@@ -231,8 +231,8 @@ def test_hit_index_is_the_earliest_hit_not_the_closest_approach():
 
     assert hit
     assert within(ASCENDING_CROSSING_S, t_array[hit_index]), "the hit is the ascending pass"
-    assert within(DESCENDING_CROSSING_S, t_array[closest_index]), "the nearest pass is the descending one"
-    assert t_array[hit_index] < t_array[closest_index]
+    assert within(DESCENDING_CROSSING_S, t_array[miss_index]), "the nearest pass is the descending one"
+    assert t_array[hit_index] < t_array[miss_index]
 
 
 def test_a_moving_targets_position_over_time_is_its_launch_point_plus_velocity_times_time():
@@ -261,8 +261,8 @@ def test_a_moving_targets_position_over_time_is_its_launch_point_plus_velocity_t
     assert target.position_at(0.0) == pytest.approx((12.0, -3.0, 7.0))
 
 
-def test_closest_approach_lands_on_the_true_minimum_not_the_nearest_grid_point():
-    """Two trajectories crossing in flight have a closest approach the resampling grid cannot move.
+def test_the_miss_distance_lands_on_the_true_minimum_not_the_nearest_grid_point():
+    """Two trajectories crossing in flight have a miss distance the resampling grid cannot move.
 
     The metric puts both trajectories on one shared time base by resampling onto
     a fixed 2000-point grid, and a minimum taken over a grid returns the smallest
@@ -273,7 +273,7 @@ def test_closest_approach_lands_on_the_true_minimum_not_the_nearest_grid_point()
 
     The case is built so the right answer is available by hand. Both projectiles
     fly straight at constant velocity, so their separation is linear in time and
-    the closest approach is the foot of the perpendicular from the launch offset
+    the nearest pass is the foot of the perpendicular from the launch offset
     to the line of relative motion: 304.105 m at t = 3.867 s. The crossing is
     deliberately not near a grid point. Over the same 20 s, a 20-point grid
     answers 307.585 m and a 200-point grid 304.172 m, so the 1 cm tolerance below
@@ -295,23 +295,21 @@ def test_closest_approach_lands_on_the_true_minimum_not_the_nearest_grid_point()
     second_launch = np.array([600.0, 40.0, 0.0])
 
     relative_velocity = second_velocity - first_velocity
-    closest_time = -(second_launch @ relative_velocity) / (relative_velocity @ relative_velocity)
-    closest_distance = np.linalg.norm(second_launch + relative_velocity * closest_time)
+    miss_time = -(second_launch @ relative_velocity) / (relative_velocity @ relative_velocity)
+    miss_distance = np.linalg.norm(second_launch + relative_velocity * miss_time)
 
     def straight_line(launch, velocity, times):
         return launch[None, :] + np.outer(times, velocity)
 
     distances = []
-    times_of_closest_approach = []
+    miss_times = []
     for sample_count in (401, 2001, 10001, 40001, 200001):
         times = np.linspace(0.0, 20.0, sample_count)
         first = straight_line(np.zeros(3), first_velocity, times)
         second = straight_line(second_launch, second_velocity, times)
-        distance, when, _index = closest_approach_between_trajectories(first, second, times, times)
+        distance, when, _index = miss_distance_between_trajectories(first, second, times, times)
         distances.append(distance)
-        times_of_closest_approach.append(when)
+        miss_times.append(when)
 
-    assert distances == pytest.approx([closest_distance] * len(distances), abs=1e-2)
-    assert times_of_closest_approach == pytest.approx(
-        [closest_time] * len(times_of_closest_approach), abs=0.5 * 20.0 / 1999
-    )
+    assert distances == pytest.approx([miss_distance] * len(distances), abs=1e-2)
+    assert miss_times == pytest.approx([miss_time] * len(miss_times), abs=0.5 * 20.0 / 1999)

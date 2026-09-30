@@ -64,14 +64,14 @@ def _simulate_candidate(physics, speed, elevation_deg, azimuth_deg, target_x_sta
     max_time = max(6.0, min(45.0, (2.0 * speed * max(math.sin(elev), 0.04) / physics.gravity) * 1.4 + 5.0))
     steps = int(max_time / dt)
 
-    min_d = float("inf")
+    miss_distance = float("inf")
     hit = False
     hit_time = None
     for _ in range(steps):
         tx = target_x_start + target_vx * t
         d = math.sqrt((x - tx) ** 2 + y**2 + z**2)
-        if d < min_d:
-            min_d = d
+        if d < miss_distance:
+            miss_distance = d
         if d <= target_radius:
             hit = True
             hit_time = t
@@ -88,7 +88,7 @@ def _simulate_candidate(physics, speed, elevation_deg, azimuth_deg, target_x_sta
         if y <= 0.0 and t > 0.2:
             break
 
-    return min_d, hit, hit_time
+    return miss_distance, hit, hit_time
 
 
 def solve_launch(snapshot):
@@ -118,11 +118,11 @@ def solve_launch(snapshot):
 
     best = None
 
-    def consider(speed, elevation, azimuth, d, hit, hit_time):
+    def consider(speed, elevation, azimuth, miss_distance, hit, hit_time):
         """Keep the candidate if it beats the incumbent by the search's own ranking."""
         nonlocal best
         cand = {
-            "distance": float(d),
+            "miss_distance": float(miss_distance),
             "hit": bool(hit),
             "speed": float(speed),
             "elevation": float(elevation),
@@ -137,7 +137,7 @@ def solve_launch(snapshot):
         elif cand["hit"]:
             if cand["hit_time"] < best["hit_time"]:
                 best = cand
-        elif cand["distance"] < best["distance"]:
+        elif cand["miss_distance"] < best["miss_distance"]:
             best = cand
 
     t_max = min(50.0, max(18.0, abs(target_x_start) / 190.0 + 14.0))
@@ -182,7 +182,7 @@ def solve_launch(snapshot):
 
     return {
         "ok": True,
-        "distance": best["distance"],
+        "miss_distance": best["miss_distance"],
         "speed": best["speed"],
         "elevation": best["elevation"],
         "azimuth": best["azimuth"],

@@ -1,0 +1,44 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+# A new push makes the previous run on the same branch irrelevant.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pytest (python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # The declared floors for numpy and scipy both need 3.11, which is why
+        # there is no 3.10 leg here. Add a version to the classifier list in
+        # pyproject.toml in the same commit.
+        python-version: ["3.11", "3.12"]
+
+    env:
+      # The renderer test needs a video driver and the runner has no screen. The
+      # dummy driver gives it a surface to draw into and no window to open.
+      SDL_VIDEODRIVER: dummy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Install the project and its test dependencies
+        # --locked fails the run when pyproject.toml and uv.lock disagree, so a
+        # dependency change that skips the lockfile cannot reach the suite.
+        run: uv sync --locked
+
+      - name: Run the suite
+        run: uv run pytest -q

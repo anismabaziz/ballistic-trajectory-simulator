@@ -27,7 +27,7 @@ def check_collision(xs, ys, zs, target, t_array=None, dt=0.01):
     """
     xs, ys, zs: missile trajectory arrays
     target: Target instance
-    Returns: hit (bool), hit_index, closest_distance, closest_index
+    Returns: hit (bool), hit_index, miss_distance, miss_index
     """
     if t_array is None:
         t_array = np.arange(len(xs)) * dt
@@ -40,18 +40,19 @@ def check_collision(xs, ys, zs, target, t_array=None, dt=0.01):
                         (zs - target_positions[:, 2])**2)
 
     hit_mask = distances <= target.radius
-    closest_idx = int(np.argmin(distances))
-    closest_distance = np.min(distances)
+    miss_index = int(np.argmin(distances))
+    miss_distance = np.min(distances)
 
     if np.any(hit_mask):
         hit_index = int(np.argmax(hit_mask))
-        return True, hit_index, closest_distance, closest_idx
-    return False, None, closest_distance, closest_idx
+        return True, hit_index, miss_distance, miss_index
+    return False, None, miss_distance, miss_index
 
 
-def closest_approach_between_trajectories(traj1, traj2, t1, t2):
+def miss_distance_between_trajectories(traj1, traj2, t1, t2):
     """
-    Compute closest Euclidean distance between two trajectories over shared time.
+    Compute the smallest Euclidean distance between two trajectories over the time
+    they share.
 
     traj1/traj2 shape: (N, 3)
     t1/t2 shape: (N,)

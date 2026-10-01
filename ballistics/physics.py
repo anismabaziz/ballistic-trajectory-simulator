@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 from typing import Literal, overload
-import config
+from . import config
 
 
 class BallisticPhysics:
@@ -40,6 +40,51 @@ class BallisticPhysics:
         _, y, _, vx, vy, vz = state
         ax, ay, az = self.compute_acceleration(y, vx, vy, vz)
         return [vx, vy, vz, ax, ay, az]
+
+    def integrate_fixed_step(self, initial_state, step, duration, rule):
+        """Advance the state through the same acceleration model, fixed step.
+
+        The renderer steps this way so its frame pacing stays deterministic: it
+        knows before the frame starts how many steps it will take, and how long
+        each one costs. Two rules are available and the convergence study
+        measures both against the adaptive solver. `rk4` is the classical
+        four-stage rule and is what the renderer uses. `euler` is semi-implicit
+        Euler, the rule the renderer shipped with, kept because it is the
+        baseline the study compares against and it is first order.
+        """
+        if rule not in FIXED_STEP_RULES:
+            raise ValueError(f"unknown fixed-step rule: {rule!r}")
+        # Copy, because the Euler step updates the state in place and a caller
+        # handing us its own array should not find it changed underneath.
+        state = np.array(initial_state, dtype=float)
+        count = max(1, int(np.ceil(duration / step)))
+        # Trim the step so the run lands exactly on `duration`. Without this a
+        # sweep over step sizes compares runs that stopped at different times,
+        # and the error looks noisier than the rule is.
+        step = duration / count
+        for _ in range(count):
+            state = FIXED_STEP_RULES[rule](self, state, step)
+        return state
+
+    def _euler_step(self, state, step):
+        ax, ay, az = self.compute_acceleration(state[1], state[3], state[4], state[5])
+        state[3] += ax * step
+        state[4] += ay * step
+        state[5] += az * step
+        state[0] += state[3] * step
+        state[1] += state[4] * step
+        state[2] += state[5] * step
+        return state
+
+    def _rk4_step(self, state, step):
+        def derivative(point):
+            return np.asarray(self.projectile_rhs_3d(0.0, point), dtype=float)
+
+        k1 = derivative(state)
+        k2 = derivative(state + 0.5 * step * k1)
+        k3 = derivative(state + 0.5 * step * k2)
+        k4 = derivative(state + step * k3)
+        return state + (step / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
 
     def compute_acceleration(self, altitude_y, vx, vy, vz):
         y = altitude_y
@@ -136,81 +181,5 @@ class BallisticPhysics:
         return xs, ys, zs, R, T, H
 
 
-@overload
-def trajectory_3d(
-    v0,
-    angle_deg,
-    azimuth_deg=0.0,
-    m=config.MASS,
-    g=config.G,
-    alt_levels=None,
-    wind_x_vals=None,
-    wind_z_vals=None,
-    wind_y_vals=None,
-    wind_vertical_vals=None,
-    latitude=0,
-    return_time: Literal[False] = False,
-    max_step=0.05,
-    apply_earth_curvature=False,
-    earth_radius=6_371_000.0,
-):
-    ...
 
-
-@overload
-def trajectory_3d(
-    v0,
-    angle_deg,
-    azimuth_deg=0.0,
-    m=config.MASS,
-    g=config.G,
-    alt_levels=None,
-    wind_x_vals=None,
-    wind_z_vals=None,
-    wind_y_vals=None,
-    wind_vertical_vals=None,
-    latitude=0,
-    return_time: Literal[True] = True,
-    max_step=0.05,
-    apply_earth_curvature=False,
-    earth_radius=6_371_000.0,
-):
-    ...
-
-
-def trajectory_3d(
-    v0,
-    angle_deg,
-    azimuth_deg=0.0,
-    m=config.MASS,
-    g=config.G,
-    alt_levels=None,
-    wind_x_vals=None,
-    wind_z_vals=None,
-    wind_y_vals=None,
-    wind_vertical_vals=None,
-    latitude=0,
-    return_time=False,
-    max_step=0.05,
-    apply_earth_curvature=False,
-    earth_radius=6_371_000.0,
-):
-    simulator = BallisticPhysics(
-        mass=m,
-        gravity=g,
-        alt_levels=alt_levels,
-        wind_x_vals=wind_x_vals,
-        wind_z_vals=wind_z_vals,
-        wind_y_vals=wind_y_vals,
-        wind_vertical_vals=wind_vertical_vals,
-        latitude=latitude,
-    )
-    return simulator.trajectory_3d(
-        v0,
-        angle_deg,
-        azimuth_deg=azimuth_deg,
-        return_time=return_time,
-        max_step=max_step,
-        apply_earth_curvature=apply_earth_curvature,
-        earth_radius=earth_radius,
-    )
+FIXED_STEP_RULES = {"euler": BallisticPhysics._euler_step, "rk4": BallisticPhysics._rk4_step}

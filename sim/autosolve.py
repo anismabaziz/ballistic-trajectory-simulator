@@ -1,7 +1,48 @@
 import math
-import time
 
 import numpy as np
+
+from ballistics.physics import BallisticPhysics
+
+# The coarse sweep is 54 flight times by 7 azimuths and the refinement around the
+# winner is 7 by 7 by 7, so no solve can ever spend more than 721 candidates.
+# The default sits above that ceiling, which means a solve given the default ran
+# the whole grid and its answer is the best of everything it looked at.
+DEFAULT_CANDIDATE_BUDGET = 1000
+
+
+class _CandidateBudget:
+    """How many candidate flights the search is allowed to spend.
+
+    The budget is counted in candidate flights rather than seconds so the answer
+    depends on the problem and not on the machine. A wall clock made a busy
+    machine return a worse launch solution without saying so, and the flag that
+    recorded it was never read by anything.
+    """
+
+    def __init__(self, limit):
+        self.limit = max(1, int(limit))
+        self.used = 0
+        self.refused = False
+
+    @property
+    def exhausted(self):
+        """True once the search wanted a candidate and could not have one.
+
+        This is a refused claim, not a counter that reached the limit. The two
+        differ at the boundary: a budget that happens to equal the grid size lets
+        the search fly every candidate it wanted, so its answer really is the
+        best of the whole grid and must not be reported as a truncated one.
+        """
+        return self.refused
+
+    def claim(self):
+        """Claim one candidate flight, or report that there is no budget left."""
+        if self.used >= self.limit:
+            self.refused = True
+            return False
+        self.used += 1
+        return True
 
 
 def _linspace(start, stop, count):
@@ -11,32 +52,7 @@ def _linspace(start, stop, count):
     return [float(start + i * step) for i in range(count)]
 
 
-def _acceleration(params, altitude_y, vx, vy, vz):
-    wind_x = float(np.interp(altitude_y, params["alt_levels"], params["wind_x_vals"]))
-    wind_z = float(np.interp(altitude_y, params["alt_levels"], params["wind_z_vals"]))
-    wind_vertical = float(np.interp(altitude_y, params["alt_levels"], params["wind_vertical_vals"]))
-
-    vx_rel = vx - wind_x
-    vy_rel = vy - wind_vertical
-    vz_rel = vz - wind_z
-    v_rel = math.sqrt(vx_rel * vx_rel + vy_rel * vy_rel + vz_rel * vz_rel)
-
-    if v_rel > 1e-9:
-        drag_force = 0.5 * params["rho"] * params["drag_coefficient"] * params["area"] * (v_rel * v_rel)
-        ax = -(drag_force / params["mass"]) * (vx_rel / v_rel)
-        ay = -params["gravity"] - (drag_force / params["mass"]) * (vy_rel / v_rel)
-        az = -(drag_force / params["mass"]) * (vz_rel / v_rel)
-    else:
-        ax, ay, az = 0.0, -params["gravity"], 0.0
-
-    omega = 7.2921e-5
-    lat = params["latitude"]
-    ax += 2.0 * omega * vz * math.sin(lat)
-    az += -2.0 * omega * vx * math.sin(lat)
-    return ax, ay, az
-
-
-def _simulate_candidate(params, speed, elevation_deg, azimuth_deg, target_x_start, target_vx, target_radius, dt=0.014):
+def _simulate_candidate(physics, speed, elevation_deg, azimuth_deg, target_x_start, target_vx, target_radius, dt=0.014):
     elev = math.radians(elevation_deg)
     az = math.radians(azimuth_deg)
     vx = speed * math.cos(elev) * math.cos(az)
@@ -45,26 +61,26 @@ def _simulate_candidate(params, speed, elevation_deg, azimuth_deg, target_x_star
     x, y, z = 0.0, 0.0, 0.0
     t = 0.0
 
-    max_time = max(6.0, min(45.0, (2.0 * speed * max(math.sin(elev), 0.04) / params["gravity"]) * 1.4 + 5.0))
+    max_time = max(6.0, min(45.0, (2.0 * speed * max(math.sin(elev), 0.04) / physics.gravity) * 1.4 + 5.0))
     steps = int(max_time / dt)
 
-    min_d = float("inf")
+    miss_distance = float("inf")
     hit = False
     hit_time = None
     for _ in range(steps):
         tx = target_x_start + target_vx * t
         d = math.sqrt((x - tx) ** 2 + y**2 + z**2)
-        if d < min_d:
-            min_d = d
+        if d < miss_distance:
+            miss_distance = d
         if d <= target_radius:
             hit = True
             hit_time = t
             break
 
-        ax, ay, az_acc = _acceleration(params, y, vx, vy, vz)
+        ax, ay, az_acceleration = physics.compute_acceleration(y, vx, vy, vz)
         vx += ax * dt
         vy += ay * dt
-        vz += az_acc * dt
+        vz += az_acceleration * dt
         x += vx * dt
         y += vy * dt
         z += vz * dt
@@ -72,25 +88,28 @@ def _simulate_candidate(params, speed, elevation_deg, azimuth_deg, target_x_star
         if y <= 0.0 and t > 0.2:
             break
 
-    return min_d, hit, hit_time
+    return miss_distance, hit, hit_time
 
 
 def solve_launch(snapshot):
-    start = time.perf_counter()
-    deadline = start + float(snapshot.get("max_wall_s", 2.0))
+    budget = _CandidateBudget(snapshot.get("candidate_budget", DEFAULT_CANDIDATE_BUDGET))
 
-    params = {
-        "gravity": float(snapshot["gravity"]),
-        "mass": float(snapshot["mass"]),
-        "rho": float(snapshot["rho"]),
-        "drag_coefficient": float(snapshot["drag_coefficient"]),
-        "area": float(snapshot["area"]),
-        "latitude": float(snapshot["latitude"]),
-        "alt_levels": np.array(snapshot["alt_levels"], dtype=float),
-        "wind_x_vals": np.array(snapshot["wind_x_vals"], dtype=float),
-        "wind_z_vals": np.array(snapshot["wind_z_vals"], dtype=float),
-        "wind_vertical_vals": np.array(snapshot["wind_vertical_vals"], dtype=float),
-    }
+    # The wind table is copied rather than referenced. `BallisticPhysics` keeps
+    # whatever arrays it is handed with `asarray`, which does not copy a float
+    # array, so passing the renderer's own arrays would let the atmosphere change
+    # under the search while it solves. The problem being solved is fixed at launch.
+    physics = BallisticPhysics(
+        mass=snapshot["mass"],
+        gravity=snapshot["gravity"],
+        rho=snapshot["rho"],
+        drag_coefficient=snapshot["drag_coefficient"],
+        area=snapshot["area"],
+        latitude=snapshot["latitude"],
+        alt_levels=np.array(snapshot["alt_levels"], dtype=float),
+        wind_x_vals=np.array(snapshot["wind_x_vals"], dtype=float),
+        wind_z_vals=np.array(snapshot["wind_z_vals"], dtype=float),
+        wind_vertical_vals=np.array(snapshot["wind_vertical_vals"], dtype=float),
+    )
 
     target_x_start = float(snapshot["target_x_launch"])
     target_vx = float(snapshot["target_velocity_x"])
@@ -99,24 +118,37 @@ def solve_launch(snapshot):
 
     best = None
 
-    def better(cand, best_cand):
-        if best_cand is None:
-            return True
-        if cand["hit"] != best_cand["hit"]:
-            return cand["hit"]
-        if cand["hit"]:
-            return cand["hit_time"] < best_cand["hit_time"]
-        return cand["distance"] < best_cand["distance"]
+    def consider(speed, elevation, azimuth, miss_distance, hit, hit_time):
+        """Keep the candidate if it beats the incumbent by the search's own ranking."""
+        nonlocal best
+        cand = {
+            "miss_distance": float(miss_distance),
+            "hit": bool(hit),
+            "speed": float(speed),
+            "elevation": float(elevation),
+            "azimuth": float(azimuth),
+            "hit_time": float(hit_time) if hit_time is not None else 1e9,
+        }
+        if best is None:
+            best = cand
+        elif cand["hit"] != best["hit"]:
+            if cand["hit"]:
+                best = cand
+        elif cand["hit"]:
+            if cand["hit_time"] < best["hit_time"]:
+                best = cand
+        elif cand["miss_distance"] < best["miss_distance"]:
+            best = cand
 
     t_max = min(50.0, max(18.0, abs(target_x_start) / 190.0 + 14.0))
     for t in _linspace(1.2, t_max, 54):
-        if time.perf_counter() >= deadline:
+        if budget.exhausted:
             break
         x_t = target_x_start + target_vx * t
         if x_t <= 20.0:
             continue
 
-        theta = math.degrees(math.atan((params["gravity"] * t * t) / (2.0 * x_t)))
+        theta = math.degrees(math.atan((physics.gravity * t * t) / (2.0 * x_t)))
         if theta < min_elev or theta > 87.5:
             continue
 
@@ -126,48 +158,48 @@ def solve_launch(snapshot):
             continue
 
         for az in (-16.0, -8.0, -4.0, 0.0, 4.0, 8.0, 16.0):
-            d, hit, hit_time = _simulate_candidate(params, speed, theta, az, target_x_start, target_vx, target_radius, dt=0.015)
-            cand = {
-                "distance": float(d),
-                "hit": bool(hit),
-                "speed": float(speed),
-                "elevation": float(theta),
-                "azimuth": float(az),
-                "hit_time": float(hit_time) if hit_time is not None else 1e9,
-            }
-            if better(cand, best):
-                best = cand
+            if not budget.claim():
+                break
+            consider(speed, theta, az, *_simulate_candidate(physics, speed, theta, az, target_x_start, target_vx, target_radius, dt=0.015))
 
     if best is None:
-        return {"ok": False}
+        return {"ok": False, **_budget_reporting(budget)}
 
     refine_speeds = _linspace(max(70.0, best["speed"] - 100.0), min(2200.0, best["speed"] + 100.0), 7)
     refine_elev = _linspace(max(min_elev, best["elevation"] - 6.0), min(88.0, best["elevation"] + 6.0), 7)
     refine_az = _linspace(max(-35.0, best["azimuth"] - 6.0), min(35.0, best["azimuth"] + 6.0), 7)
 
     for s in refine_speeds:
-        if time.perf_counter() >= deadline:
+        if budget.exhausted:
             break
         for e in refine_elev:
+            if budget.exhausted:
+                break
             for a in refine_az:
-                d, hit, hit_time = _simulate_candidate(params, s, e, a, target_x_start, target_vx, target_radius, dt=0.012)
-                cand = {
-                    "distance": float(d),
-                    "hit": bool(hit),
-                    "speed": float(s),
-                    "elevation": float(e),
-                    "azimuth": float(a),
-                    "hit_time": float(hit_time) if hit_time is not None else 1e9,
-                }
-                if better(cand, best):
-                    best = cand
+                if not budget.claim():
+                    break
+                consider(s, e, a, *_simulate_candidate(physics, s, e, a, target_x_start, target_vx, target_radius, dt=0.012))
 
     return {
         "ok": True,
-        "distance": best["distance"],
+        "miss_distance": best["miss_distance"],
         "speed": best["speed"],
         "elevation": best["elevation"],
         "azimuth": best["azimuth"],
         "hit": best["hit"],
-        "timed_out": time.perf_counter() >= deadline,
+        **_budget_reporting(budget),
+    }
+
+
+def _budget_reporting(budget):
+    """The candidate budget every answer carries, hit or miss.
+
+    A caller cannot tell a best-of-the-grid answer from a prefix of one without
+    these, and a caller that cannot tell them apart will present both the same
+    way.
+    """
+    return {
+        "candidates_used": budget.used,
+        "candidate_budget": budget.limit,
+        "exhausted": budget.exhausted,
     }

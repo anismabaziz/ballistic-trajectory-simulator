@@ -2,209 +2,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.patches as mpatches
 from matplotlib.animation import FuncAnimation
-from scipy.optimize import brentq
-from physics import BallisticPhysics
-from targets import check_collision, closest_approach_between_trajectories
 
-
-DEFAULT_SIMULATOR = BallisticPhysics()
-
-
-def plot_trajectory(
-    xs,
-    ys,
-    target,
-    hit=False,
-    hit_idx=None,
-    closest_idx=None,
-    target_positions=None,
-    closest_distance=None,
-    title="Missile Trajectory",
-):
-    plt.figure(figsize=(10, 5))
-    plt.plot(xs, ys, label="Missile Path")
-
-    if target_positions is None:
-        target_positions = np.column_stack((
-            np.full_like(xs, target.x, dtype=float),
-            np.full_like(ys, target.y, dtype=float),
-            np.zeros_like(xs, dtype=float),
-        ))
-
-    tx = target_positions[:, 0]
-    ty = target_positions[:, 1]
-    plt.plot(tx, ty, linestyle="--", color="gray", label="Target Path")
-
-    if closest_idx is not None:
-        plt.scatter(
-            xs[closest_idx],
-            ys[closest_idx],
-            color="orange",
-            s=60,
-            label="Closest approach",
-            zorder=5,
-        )
-
-    if hit:
-        hit_index = hit_idx if hit_idx is not None else int(np.argmin(np.abs(xs - tx)))
-        plt.scatter(xs[hit_index], ys[hit_index], color='green', s=100, label='Hit')
-        circle = mpatches.Circle(
-            (float(tx[hit_index]), float(ty[hit_index])),
-            target.radius,
-            color='green',
-            fill=False,
-        )
-        plt.gca().add_patch(circle)
+def show_or_close(fig, show_plot):
+    if show_plot:
+        plt.show()
     else:
-        miss_idx = closest_idx if closest_idx is not None else -1
-        plt.scatter(tx[miss_idx], ty[miss_idx], color='red', marker='x', s=100, label='Miss')
-
-    if closest_distance is not None:
-        plt.text(
-            0.02,
-            0.98,
-            f"Closest distance: {closest_distance:.2f} m",
-            transform=plt.gca().transAxes,
-            verticalalignment="top",
-        )
-
-    plt.xlabel("X (m)")
-    plt.ylabel("Y (m)")
-    plt.title(title)
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-
-def find_launch_angle(v0, target_x, trajectory_func=None):
-    """
-    Use brentq to find the launch angle that hits target_x.
-    Automatically scans for a bracket to avoid ValueError.
-    """
-    if trajectory_func is None:
-        trajectory_func = DEFAULT_SIMULATOR.trajectory_3d
-
-    grid = np.linspace(1.0, 89.0, 177)
-    diffs = []
-    for angle in grid:
-        _, _, _, R, _, _ = trajectory_func(v0, angle)
-        diffs.append(R - target_x)
-
-    angle_low = None
-    angle_high = None
-    for i in range(len(grid) - 1):
-        d1, d2 = diffs[i], diffs[i + 1]
-        if d1 == 0:
-            return float(grid[i])
-        if d1 * d2 < 0:
-            angle_low = grid[i]
-            angle_high = grid[i + 1]
-            break
-
-    if angle_low is None or angle_high is None:
-        raise ValueError("Cannot find bracketing angles. Target might be out of range.")
-
-    def range_error(angle_deg):
-        _, _, _, R, _, _ = trajectory_func(v0, angle_deg)
-        return R - target_x
-
-    return brentq(range_error, angle_low, angle_high)
-
-
-def solve_moving_target_angle(v0, target, trajectory_func=None):
-    """
-    Find launch angle that minimizes distance to a moving target.
-    """
-    if trajectory_func is None:
-        trajectory_func = DEFAULT_SIMULATOR.trajectory_3d
-
-    def miss_distance(angle_deg):
-        xs, ys, zs, t_arr, _, _, _ = trajectory_func(v0, angle_deg, return_time=True, max_step=0.1)
-        _, _, closest_distance, _ = check_collision(xs, ys, zs, target, t_array=t_arr)
-        return closest_distance
-
-    coarse_angles = np.linspace(1.0, 89.0, 89)
-    coarse_misses = [miss_distance(a) for a in coarse_angles]
-    coarse_idx = int(np.argmin(coarse_misses))
-    coarse_best = coarse_angles[coarse_idx]
-
-    low = max(1.0, coarse_best - 1.0)
-    high = min(89.0, coarse_best + 1.0)
-    fine_angles = np.linspace(low, high, 101)
-    fine_misses = [miss_distance(a) for a in fine_angles]
-    best_angle = float(fine_angles[int(np.argmin(fine_misses))])
-
-    xs, ys, zs, t_arr, _, _, _ = trajectory_func(v0, best_angle, return_time=True, max_step=0.05)
-    hit, hit_idx, closest_distance, closest_idx = check_collision(
-        xs,
-        ys,
-        zs,
-        target,
-        t_array=t_arr,
-    )
-    return {
-        "angle": best_angle,
-        "hit": hit,
-        "hit_idx": hit_idx,
-        "closest_idx": closest_idx,
-        "closest_distance": float(closest_distance),
-        "trajectory": (xs, ys, zs),
-        "time": t_arr,
-    }
-
-
-def solve_interceptor_angle(primary_traj, primary_time, interceptor_speed, trajectory_func=None):
-    """
-    Launch a second missile from origin and minimize distance to primary missile.
-    """
-    if trajectory_func is None:
-        trajectory_func = DEFAULT_SIMULATOR.trajectory_3d
-
-    def objective(angle_deg):
-        xs2, ys2, zs2, t2, _, _, _ = trajectory_func(
-            interceptor_speed,
-            angle_deg,
-            return_time=True,
-            max_step=0.1,
-        )
-        traj2 = np.column_stack((xs2, ys2, zs2))
-        dmin, _, _ = closest_approach_between_trajectories(primary_traj, traj2, primary_time, t2)
-        return dmin
-
-    coarse_angles = np.linspace(1.0, 89.0, 89)
-    coarse_misses = [objective(a) for a in coarse_angles]
-    coarse_idx = int(np.argmin(coarse_misses))
-    coarse_best = coarse_angles[coarse_idx]
-
-    low = max(1.0, coarse_best - 1.0)
-    high = min(89.0, coarse_best + 1.0)
-    fine_angles = np.linspace(low, high, 101)
-    fine_misses = [objective(a) for a in fine_angles]
-    best_angle = float(fine_angles[int(np.argmin(fine_misses))])
-
-    xs2, ys2, zs2, t2, _, _, _ = trajectory_func(interceptor_speed, best_angle, return_time=True, max_step=0.05)
-    traj2 = np.column_stack((xs2, ys2, zs2))
-    dmin, t_shared, idx = closest_approach_between_trajectories(primary_traj, traj2, primary_time, t2)
-    return {
-        "angle": best_angle,
-        "closest_distance": float(dmin),
-        "shared_time": float(t_shared),
-        "shared_index": idx,
-        "trajectory": (xs2, ys2, zs2),
-        "time": t2,
-    }
-
-
-def plot_intercept_trajectories(primary_traj, interceptor_traj, title="Missile Intercept Scenario"):
-    plt.figure(figsize=(10, 5))
-    plt.plot(primary_traj[:, 0], primary_traj[:, 1], label="Primary missile")
-    plt.plot(interceptor_traj[:, 0], interceptor_traj[:, 1], label="Interceptor missile")
-    plt.xlabel("X (m)")
-    plt.ylabel("Y (m)")
-    plt.title(title)
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+        plt.close(fig)
 
 
 def animate_trajectory(
@@ -218,7 +21,7 @@ def animate_trajectory(
     target_radius=None,
     hit=None,
     hit_idx=None,
-    closest_distance=None,
+    miss_distance=None,
 ):
     """
     Animate a precomputed missile trajectory using matplotlib FuncAnimation.
@@ -257,8 +60,8 @@ def animate_trajectory(
         status_label = "HIT" if hit else "MISS"
         status_color = "green" if hit else "red"
         subtitle = f"{status_label}"
-        if closest_distance is not None:
-            subtitle += f" | Closest distance: {closest_distance:.2f} m"
+        if miss_distance is not None:
+            subtitle += f" | Miss distance: {miss_distance:.2f} m"
         status_text = ax.text(
             0.02,
             0.98,
@@ -322,10 +125,7 @@ def animate_trajectory(
     if save_gif_path:
         anim.save(save_gif_path, writer="pillow", fps=fps)
 
-    if show_plot:
-        plt.show()
-    else:
-        plt.close(fig)
+    show_or_close(fig, show_plot)
 
     return anim
 
@@ -339,6 +139,7 @@ def plot_trajectory_3d(
     title="Phase 7 - 3D Trajectory",
     elev=25,
     azim=-60,
+    show_plot=True,
 ):
     fig = plt.figure(figsize=(10, 7))
     ax = fig.add_subplot(111, projection="3d")
@@ -379,41 +180,4 @@ def plot_trajectory_3d(
     ax.view_init(elev=elev, azim=azim)
     ax.legend()
     plt.tight_layout()
-    plt.show()
-
-
-def plot_salvo_dispersion_3d(
-    simulator,
-    v0,
-    angle_deg,
-    azimuth_values,
-    max_step=0.05,
-    apply_earth_curvature=False,
-):
-    fig = plt.figure(figsize=(10, 7))
-    ax = fig.add_subplot(111, projection="3d")
-
-    impact_x = []
-    impact_z = []
-
-    for az in azimuth_values:
-        xs, ys, zs, _, _, _ = simulator.trajectory_3d(
-            v0,
-            angle_deg,
-            azimuth_deg=float(az),
-            max_step=max_step,
-            apply_earth_curvature=apply_earth_curvature,
-        )
-        ax.plot(xs, zs, ys, alpha=0.8)
-        impact_x.append(xs[-1])
-        impact_z.append(zs[-1])
-
-    ax.scatter(impact_x, impact_z, np.zeros_like(impact_x), color="red", s=30, label="Impact points")
-    ax.set_xlabel("X (range)")
-    ax.set_ylabel("Z (cross-range)")
-    ax.set_zlabel("Y (altitude)")
-    ax.set_title("Phase 7.6 - Multi-salvo dispersion")
-    ax.view_init(elev=22, azim=-65)
-    ax.legend()
-    plt.tight_layout()
-    plt.show()
+    show_or_close(fig, show_plot)

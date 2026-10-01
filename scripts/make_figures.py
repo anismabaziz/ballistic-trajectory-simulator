@@ -32,6 +32,7 @@ GENERATORS = [
     "integrator_convergence",
     "salvo_dispersion",
     "intercept",
+    "renderer_screenshot",
 ]
 
 

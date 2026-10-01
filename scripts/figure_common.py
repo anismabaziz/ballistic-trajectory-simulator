@@ -1,6 +1,6 @@
 """What every figure generator needs to say and do around its own drawing.
 
-The three generators differ in what they draw and share everything else: the
+The generators differ in what they draw and share everything else: the
 atmosphere they flew through, a single output-path argument, and a banner of
 launch conditions under the figure. Those live here so a figure cannot state one
 launch and get regenerated with another.
